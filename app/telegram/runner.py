@@ -1,0 +1,316 @@
+"""Per-conversation queues and the run lifecycle.
+
+One worker per ``(chat, topic)`` keeps two humans in one room in arrival order
+while other conversations keep flowing (contract T4, FR-017).
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from collections.abc import Awaitable, Callable, Sequence
+from dataclasses import dataclass
+
+from app.config import Settings
+from app.opencode.client import OpenCodeClient
+from app.opencode.errors import Busy, OpenCodeError, SessionGone, Unavailable
+from app.opencode.events import (
+    EXECUTION_DONE,
+    FORM_CREATED,
+    PERMISSION_ASKED,
+    Event,
+    EventBus,
+)
+from app.store import Store
+from app.telegram.identity import attribution_prefix, build_prompt
+from app.telegram.messenger import Messenger
+from app.telegram.streaming import StreamEditor
+from app.telegram.trigger import Trigger
+from app.telegram.types import Inbound
+
+log = logging.getLogger("bot.runner")
+
+InteractionHook = Callable[[str, Event, "RunState"], Awaitable[None]]
+
+
+@dataclass(slots=True)
+class Job:
+    message: Inbound
+    trigger: Trigger
+    files: list[dict[str, str]] | None = None
+    turn_id: int = 0
+
+
+@dataclass(slots=True)
+class RunState:
+    message: Inbound
+    conversation_key: tuple[int, int]
+    session_id: str
+    turn_id: int
+
+
+class Runner:
+    def __init__(
+        self,
+        *,
+        settings: Settings,
+        store: Store,
+        client: OpenCodeClient,
+        bus: EventBus,
+        messenger: Messenger | None = None,
+        on_interaction: InteractionHook | None = None,
+        run_timeout: float = 900.0,
+    ) -> None:
+        self._settings = settings
+        self._store = store
+        self._client = client
+        self._bus = bus
+        self.messenger: Messenger | None = messenger
+        self._on_interaction = on_interaction
+        self._run_timeout = run_timeout
+        self._queues: dict[tuple[int, int], asyncio.Queue[Job]] = {}
+        self._workers: dict[tuple[int, int], asyncio.Task[None]] = {}
+        self._active_session: dict[tuple[int, int], str] = {}
+        self._started = False
+
+    # -- lifecycle -------------------------------------------------------
+
+    def set_messenger(self, messenger: Messenger) -> None:
+        self.messenger = messenger
+
+    def set_interaction_hook(self, hook: InteractionHook) -> None:
+        self._on_interaction = hook
+
+    async def start(self) -> None:
+        self._started = True
+
+    async def stop(self) -> None:
+        for task in self._workers.values():
+            task.cancel()
+        self._workers.clear()
+
+    def queue_depth(self, key: tuple[int, int]) -> int:
+        queue = self._queues.get(key)
+        return queue.qsize() if queue else 0
+
+    @property
+    def active_sessions(self) -> dict[tuple[int, int], str]:
+        return dict(self._active_session)
+
+    # -- submission ------------------------------------------------------
+
+    async def submit(self, job: Job) -> None:
+        key = job.message.key
+        conversation = self._store.touch_conversation(
+            job.message.chat_id, job.message.thread_id, job.message.chat_type, job.message.chat_title
+        )
+        session_id = conversation.active_session_id
+        turn_id = self._store.record_turn(
+            chat_id=job.message.chat_id,
+            thread_id=job.message.thread_id,
+            session_id=session_id,
+            user_id=job.message.user_id,
+            update_id=job.message.update_id,
+            trigger=job.trigger.kind,
+            quote_of=job.message.quote.message_id if job.message.quote else None,
+        )
+        if turn_id is None:
+            if self.messenger and job.message.callback_id:
+                await self.messenger.answer_callback(job.message.callback_id, None)
+            return
+        job.turn_id = turn_id
+
+        queue = self._queues.setdefault(key, asyncio.Queue())
+        await queue.put(job)
+        worker = self._workers.get(key)
+        if worker is None or worker.done():
+            self._workers[key] = asyncio.create_task(self._drain(key), name=f"runner:{key}")
+
+    async def _drain(self, key: tuple[int, int]) -> None:
+        queue = self._queues[key]
+        while True:
+            job = await queue.get()
+            try:
+                await self._run(job)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("run failed", extra={"chat_id": key[0], "thread_id": key[1]})
+            finally:
+                queue.task_done()
+
+    # -- session binding -------------------------------------------------
+
+    async def ensure_session(self, message: Inbound) -> tuple[str, bool]:
+        conversation = self._store.touch_conversation(
+            message.chat_id, message.thread_id, message.chat_type, message.chat_title
+        )
+        if conversation.active_session_id:
+            return conversation.active_session_id, False
+        return await self.new_session(message, message.user_id)
+
+    async def new_session(self, message: Inbound, bound_by: int) -> tuple[str, bool]:
+        conversation = self._store.touch_conversation(
+            message.chat_id, message.thread_id, message.chat_type, message.chat_title
+        )
+        title = (message.chat_title or message.display_name or "conversation")[:60]
+        session_id = await self._client.create_session(
+            title=title, agent=conversation.agent, model=conversation.model
+        )
+        self._store.bind_session(
+            message.chat_id, message.thread_id, session_id, title, bound_by=bound_by
+        )
+        return session_id, True
+
+    # -- one run ---------------------------------------------------------
+
+    async def _run(self, job: Job) -> None:
+        if self.messenger is None:
+            log.error("runner has no messenger wired; dropping job")
+            return
+        message = job.message
+        key = message.key
+        conversation = self._store.touch_conversation(
+            message.chat_id, message.thread_id, message.chat_type, message.chat_title
+        )
+        participants = self._store.roster()
+        prompt = build_prompt(message, job.trigger, participants)
+
+        session_id = conversation.active_session_id
+        created = False
+        if not session_id:
+            session_id, created = await self.new_session(message, message.user_id)
+
+        turn_id = job.turn_id
+        if turn_id:
+            self._store.attach_turn_session(turn_id, session_id)
+            self._store.start_turn(turn_id)
+        self._active_session[key] = session_id
+
+        state = RunState(
+            message=message,
+            conversation_key=key,
+            session_id=session_id,
+            turn_id=turn_id,
+        )
+
+        editor = StreamEditor(
+            self.messenger.send_text,
+            self.messenger.edit_text,
+            message.chat_id,
+            thread_id=message.thread_id,
+            reply_to=message.message_id if message.is_private else None,
+            prefix=attribution_prefix(message, len(participants)),
+        )
+
+        status = "succeeded"
+        error_kind: str | None = None
+
+        try:
+            await editor.start()
+            events = self._bus.subscribe(session_id)
+            try:
+                await self._client.prompt(
+                    session_id,
+                    prompt,
+                    files=job.files,
+                    metadata={
+                        "telegram": {
+                            "chat_id": message.chat_id,
+                            "thread_id": message.thread_id,
+                            "user_id": message.user_id,
+                            "update_id": message.update_id,
+                        }
+                    },
+                )
+                await self._consume(events, editor, state)
+            finally:
+                self._bus.unsubscribe(session_id)
+
+            footer = self._footer(session_id, created)
+            await editor.finish(footer)
+        except SessionGone:
+            self._store.clear_session(message.chat_id, message.thread_id)
+            status, error_kind = "failed", "session_gone"
+            await editor.finish(
+                "This session no longer exists on the server. Send the message again to start a new one."
+            )
+        except Busy:
+            status, error_kind = "failed", "busy"
+            await editor.finish("The agent is still working on the previous request in this session.")
+        except Unavailable as exc:
+            status, error_kind = "failed", "unavailable"
+            log.warning("agent server unavailable: %s", type(exc).__name__)
+            await editor.finish("The agent server is unreachable right now. Nothing was lost; retry in a moment.")
+        except OpenCodeError:
+            status, error_kind = "failed", "open_code_error"
+            await editor.finish("The agent server rejected that request.")
+        finally:
+            if turn_id:
+                self._store.finish_turn(turn_id, status, error_kind=error_kind)
+            self._active_session.pop(key, None)
+
+    async def _consume(
+        self, events: asyncio.Queue[Event], editor: StreamEditor, state: RunState
+    ) -> None:
+        while True:
+            try:
+                event = await asyncio.wait_for(events.get(), timeout=self._run_timeout)
+            except TimeoutError:
+                log.warning("run timed out", extra={"session_id": state.session_id})
+                editor.append("\n\n[timed out waiting for the agent]")
+                return
+
+            if (delta := event.text_delta) is not None:
+                editor.append(delta)
+                await editor.flush()
+                continue
+            if event.kind in (PERMISSION_ASKED, FORM_CREATED) and self._on_interaction is not None:
+                await self._on_interaction(event.kind, event, state)
+                continue
+            if event.kind in EXECUTION_DONE:
+                if event.kind != "session.idle":
+                    text = event.text
+                    if text and not editor.text.strip():
+                        editor.append(text)
+                return
+
+    def _footer(self, session_id: str, created: bool) -> str:
+        short = session_id.split("_")[-1][:6] if "_" in session_id else session_id[:6]
+        return f"— session {short}{' (new)' if created else ''}"
+
+    # -- abort -----------------------------------------------------------
+
+    async def abort(self, message: Inbound) -> bool:
+        conversation = self._store.get_conversation(message.chat_id, message.thread_id)
+        session_id = (
+            self._active_session.get(message.key)
+            or (conversation.active_session_id if conversation else None)
+        )
+        if not session_id:
+            return False
+        interrupted = await self._client.interrupt(session_id)
+        self._store.cancel_pending_for_session(session_id)
+        return interrupted
+
+    # -- helpers ---------------------------------------------------------
+
+    def status_line(self, message: Inbound) -> str:
+        conversation = self._store.get_conversation(message.chat_id, message.thread_id)
+        session = conversation.active_session_id if conversation else None
+        model = conversation.model if conversation else None
+        model_text = f"{model['providerID']}/{model['modelID']}" if model else "server default"
+        agent = conversation.agent if conversation else None
+        depth = self.queue_depth(message.key)
+        return (
+            f"conversation: {message.chat_type} {message.chat_id}"
+            + (f" / topic {message.thread_id}" if message.thread_id else "")
+            + f"\nsession: {session or 'none yet'}"
+            + f"\nmodel: {model_text}"
+            + f"\nagent: {agent or 'server default'}"
+            + f"\nqueued: {depth}"
+        )
+
+
+def file_refs(paths: Sequence[tuple[str, str]]) -> list[dict[str, str]]:
+    return [{"type": "file", "path": path, "mime": mime} for path, mime in paths]
