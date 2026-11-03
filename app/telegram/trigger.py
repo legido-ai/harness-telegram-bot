@@ -99,18 +99,23 @@ def detect(
     addressed, command = _command_targets_bot(
         text, entities, bot_username, message.is_private
     )
-    if command is not None and not addressed:
-        return None
+    # A slash command is never a prompt. It only runs when it is addressed to
+    # this bot: unaddressed commands belong to other bots in the room.
+    if any(entity.type == "bot_command" for entity in entities):
+        if not addressed:
+            return None
+        return Trigger(kind="command", text=cleaned_command(text, entities), quote=message.quote)
 
     if message.is_private:
-        cleaned = slice_entities(text, entities) if _has_mention(text, entities, bot_username, bot_id) else text.strip()
+        cleaned = (
+            slice_entities(text, entities)
+            if _has_mention(text, entities, bot_username, bot_id)
+            else text.strip()
+        )
         return Trigger(kind="private", text=cleaned, quote=message.quote)
 
     mentioned = _has_mention(text, entities, bot_username, bot_id)
     replied = message.quote is not None and message.quote.author_id == bot_id
-
-    if command is not None:
-        return Trigger(kind="command", text=cleaned_command(text, entities), quote=message.quote)
 
     if mentioned or replied:
         kind = "mention" if mentioned else "reply"
@@ -128,11 +133,7 @@ def detect(
 def cleaned_command(text: str, entities: tuple[Entity, ...]) -> str:
     """Return ``/cmd@bot arg`` with the addressee removed and args kept."""
 
-    if not entities:
-        return text.strip()
     mapping = _u16_map(text)
-    parts: list[str] = []
-    first = True
     for entity in entities:
         if entity.type != "bot_command":
             continue
@@ -141,12 +142,9 @@ def cleaned_command(text: str, entities: tuple[Entity, ...]) -> str:
         raw = text[start:end]
         if "@" in raw:
             name, _, _target = raw.partition("@")
-            parts.append(text[:start] + name + text[end:])
-        first = False
-        break
-    if first:
-        return text.strip()
-    return " ".join(parts[0].split())
+            return " ".join((text[:start] + name + text[end:]).split())
+        return " ".join(text.split())
+    return text.strip()
 
 
 def quoted_block(quote: Quoted | None, limit: int = 1500) -> str:

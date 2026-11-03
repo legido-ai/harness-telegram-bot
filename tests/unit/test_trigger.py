@@ -97,3 +97,24 @@ def test_policy_all_answers_chatter() -> None:
     trigger = detect(message, bot_id=BOT_ID, bot_username=BOT_USERNAME, policy="all")
     assert trigger is not None
     assert trigger.kind == "policy_all"
+
+
+def test_private_slash_command_is_a_command_not_a_prompt() -> None:
+    from app.telegram.types import Entity
+
+    text = "/id"
+    entity = Entity(type="bot_command", offset=0, length=len(text))
+    message = inbound(chat_type="private", chat_id=111, text=text, entities=(entity,))
+    trigger = detect(message, bot_id=BOT_ID, bot_username=BOT_USERNAME)
+    assert trigger is not None
+    assert trigger.kind == "command"
+    assert trigger.text == "/id"
+
+
+def test_private_command_for_another_bot_is_ignored() -> None:
+    from app.telegram.types import Entity
+
+    text = "/id@otherbot"
+    entity = Entity(type="bot_command", offset=0, length=len(text))
+    message = inbound(chat_type="private", chat_id=111, text=text, entities=(entity,))
+    assert detect(message, bot_id=BOT_ID, bot_username=BOT_USERNAME) is None
