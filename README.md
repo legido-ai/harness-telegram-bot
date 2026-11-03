@@ -81,9 +81,10 @@ Useful commands: `/new`, `/sessions`, `/abort`, `/status`, `/model`, `/agent`,
 
 - **Allowlist only.** Unknown users and chats are ignored without side effects;
   attempts are logged with the numeric id and nothing else.
-- **Secrets come from the environment.** In production they are injected from OCI
-  Vault; the token and server password never appear in logs, health payloads or
-  error messages (there is a test for that).
+- **Secrets come from the environment.** The bot reads the token and server
+  password from its process environment and never from a secret store; they
+  never appear in logs, health payloads or error messages (there is a test for
+  that).
 - **Message bodies are not logged.** `/audit` shows conversation, user, session,
   timestamps, status and cost — never text.
 - **Single poller.** A second process on the same token gets Telegram `409

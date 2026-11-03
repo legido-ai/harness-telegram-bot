@@ -23,8 +23,9 @@ OPENCODE_API_URL=http://host.docker.internal:49374
 OPENCODE_SERVER_PASSWORD=...
 ```
 
-In production the first three values come from OCI Vault through `oci-env`; the
-`.env` file is only for local runs.
+The `.env` file is git-ignored and is only for local runs; in any other
+environment the operator supplies the same values through the process
+environment.
 
 ## 3. Run locally
 
