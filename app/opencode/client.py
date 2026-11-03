@@ -47,6 +47,11 @@ class OpenCodeClient:
     async def aclose(self) -> None:
         await self._client.aclose()
 
+    def stream(self, method: str, path: str, **kwargs: Any) -> Any:
+        """Context-manager passthrough used by the SSE consumer (C9)."""
+
+        return self._client.stream(method, path, **kwargs)
+
     # -- plumbing --------------------------------------------------------
 
     async def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:

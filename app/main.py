@@ -61,6 +61,10 @@ async def run() -> int:
     application = bot_app.build()
     try:
         await application.initialize()
+        # post_init is not invoked by start() when the lifecycle is driven
+        # manually; without it the bot has no identity and health stays degraded.
+        if application.post_init is not None:
+            await application.post_init(application)
         await application.start()
     except InvalidToken:
         log.critical("Telegram rejected the bot token")
