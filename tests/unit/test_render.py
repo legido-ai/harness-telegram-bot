@@ -39,6 +39,22 @@ def test_strip_html_returns_what_a_user_reads() -> None:
 def test_keyboard_is_one_row_with_two_blocks() -> None:
     from app.telegram.keyboards import main_menu
 
-    markup = main_menu()
+    markup = main_menu("📊 6K / 1.0M (1%)")
     assert len(markup.keyboard) == 1
-    assert [button.text for button in markup.keyboard[0]] == ["🧠 Model", "📊 Context"]
+    assert [button.text for button in markup.keyboard[0]] == ["🧠 Model", "📊 6K / 1.0M (1%)"]
+
+
+def test_context_button_label_shows_usage() -> None:
+    from app.telegram.keyboards import context_label
+
+    assert context_label(6000, 1_000_000) == "📊 6K / 1.0M (1%)"
+    assert context_label(None, None) == "📊 0"
+    assert context_label(6000, None) == "📊 6K"
+
+
+def test_buttons_match_by_icon_after_relabelling() -> None:
+    from app.telegram.keyboards import menu_command
+
+    assert menu_command("📊 6K / 1.0M (1%)") == "/context"
+    assert menu_command("🧠 Model") == "/model"
+    assert menu_command("hello") is None

@@ -31,6 +31,7 @@ class FakeMessenger:
     callbacks: list[tuple[str, str]] = field(default_factory=list)
     pinned: list[tuple[int, int]] = field(default_factory=list)
     typing: list[tuple[int, int]] = field(default_factory=list)
+    keyboards: list[tuple[int, int, Any]] = field(default_factory=list)
     _next_id: int = 100
 
     async def send_text(
@@ -69,6 +70,9 @@ class FakeMessenger:
 
     async def answer_callback(self, callback_id: str, text: str | None = None) -> None:
         self.callbacks.append((callback_id, text or ""))
+
+    async def set_reply_keyboard(self, chat_id: int, message_id: int, keyboard: Any) -> None:
+        self.keyboards.append((chat_id, message_id, keyboard))
 
     async def send_typing(self, chat_id: int, thread_id: int = 0) -> None:
         self.typing.append((chat_id, thread_id))

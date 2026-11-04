@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.telegram.footer import format_tokens
+
 
 def _markup(rows: list[list[tuple[str, str]]]) -> Any:
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -13,32 +15,41 @@ def _markup(rows: list[list[tuple[str, str]]]) -> Any:
     )
 
 
-MENU = (
-    ("🧠 Model", "/model"),
-    ("📊 Context", "/context"),
-)
+MODEL_LABEL = "🧠 Model"
+CONTEXT_EMPTY = "📊 0"
 
 
-def main_menu() -> Any:
-    """One row, two blocks: model picker and context usage.
+def context_label(used: int | None, limit: int | None) -> str:
+    """The context button *shows* the usage: 📊 6K / 1.0M (1%)."""
 
-    Commands stay available by typing; the keyboard only carries what is worth
-    reaching without leaving the conversation.
-    """
+    if used and limit:
+        percent = round(used / limit * 100)
+        return f"📊 {format_tokens(used)} / {format_tokens(limit)} ({percent}%)"
+    if used:
+        return f"📊 {format_tokens(used)}"
+    return CONTEXT_EMPTY
+
+
+def main_menu(context: str | None = None) -> Any:
+    """One row, two blocks: model picker and live context usage."""
 
     from telegram import KeyboardButton, ReplyKeyboardMarkup
 
     return ReplyKeyboardMarkup(
-        [[KeyboardButton(label) for label, _ in MENU]],
+        [[KeyboardButton(MODEL_LABEL), KeyboardButton(context or CONTEXT_EMPTY)]],
         resize_keyboard=True,
         is_persistent=True,
     )
 
 
 def menu_command(text: str) -> str | None:
-    for label, command in MENU:
-        if text.strip() == label:
-            return command
+    """Buttons are matched by icon: the context label changes every run."""
+
+    stripped = text.strip()
+    if stripped.startswith("🧠"):
+        return "/model"
+    if stripped.startswith("📊"):
+        return "/context"
     return None
 
 

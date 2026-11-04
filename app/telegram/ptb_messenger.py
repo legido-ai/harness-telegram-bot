@@ -92,6 +92,14 @@ class TelegramMessenger:
         except Exception as exc:  # a typing indicator must never break a run
             log.debug("typing action failed: %s", type(exc).__name__)
 
+    async def set_reply_keyboard(self, chat_id: int, message_id: int, keyboard: Any) -> None:
+        try:
+            await self._bot.edit_message_reply_markup(
+                chat_id=chat_id, message_id=message_id, reply_markup=keyboard
+            )
+        except Exception as exc:
+            log.debug("keyboard update failed: %s", type(exc).__name__)
+
     async def pin(self, chat_id: int, message_id: int) -> None:
         try:
             await self._bot.pin_chat_message(

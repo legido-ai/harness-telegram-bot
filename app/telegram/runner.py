@@ -26,6 +26,7 @@ from app.store import Store
 from app.telegram.dashboard import dashboard_text
 from app.telegram.footer import RunStats, format_cost, format_footer, format_tokens
 from app.telegram.identity import attribution_prefix, build_prompt
+from app.telegram.keyboards import context_label, main_menu
 from app.telegram.messenger import Messenger
 from app.telegram.streaming import StreamEditor
 from app.telegram.trigger import Trigger
@@ -347,7 +348,7 @@ class Runner:
 
     async def _refresh_dashboard(
         self, message: Inbound, stats: RunStats, status: str = "idle"
-    ) -> None:
+    ) -> int | None:
         """Keep the pinned card current: one message per conversation, edited."""
 
         if self.messenger is None:
@@ -362,8 +363,13 @@ class Runner:
         existing = self._store.pinned_message_id(message.chat_id, message.thread_id)
         if existing:
             try:
-                await self.messenger.edit_text(message.chat_id, existing, text)
-                return
+                await self.messenger.edit_text(
+                    message.chat_id,
+                    existing,
+                    text,
+                )
+                await self._refresh_keyboard(message, existing, stats)
+                return existing
             except Exception:  # deleted message, revoked rights: start over
                 log.debug("dashboard edit failed; recreating")
         message_id = await self.messenger.send_text(
@@ -371,6 +377,37 @@ class Runner:
         )
         self._store.set_pinned_message_id(message.chat_id, message.thread_id, message_id)
         await self.messenger.pin(message.chat_id, message_id)
+        await self._refresh_keyboard(message, message_id, stats)
+        return message_id
+
+    async def _refresh_keyboard(
+        self, message: Inbound, message_id: int, stats: RunStats | None
+    ) -> None:
+        if self.messenger is None:
+            return
+        label = context_label(
+            stats.used_tokens if stats else None, stats.limit_tokens if stats else None
+        )
+        await self.messenger.set_reply_keyboard(
+            message.chat_id, message_id, main_menu(label)
+        )
+
+    async def refresh_keyboard(self, message: Inbound) -> None:
+        """Recompute the context button for an on-demand command."""
+
+        if self.messenger is None:
+            return
+        message_id = self._store.pinned_message_id(message.chat_id, message.thread_id)
+        if not message_id:
+            return
+        conversation = self._store.get_conversation(message.chat_id, message.thread_id)
+        session_id = conversation.active_session_id if conversation else None
+        stats = None
+        if session_id:
+            stats = await self._run_stats(
+                session_id, created=False, seconds=None, model_hint=conversation.model
+            )
+        await self._refresh_keyboard(message, message_id, stats)
 
     async def context_line(self, message: Inbound) -> str:
         """One line for the chat, mirroring the status bar of the TUI."""
