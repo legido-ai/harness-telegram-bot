@@ -21,6 +21,7 @@ needs:
 | Quoted messages | a reply quotes the previous answer as *context*, and a mention inside a quote never triggers |
 | Approvals | the first allowlisted human to press Allow/Deny decides; the message records who |
 | Restarts | sessions, bindings, turn history and the dedupe ledger survive in SQLite on a volume |
+| Consumption | every answer ends with `— model · 42K/200K (21%) · $0.03 · 12s`: context used, cost and duration |
 
 Deliberately out of scope for 0.1.0: voice, TTS, scheduled tasks, worktree
 switching, skills catalogue, file browser and extra languages.

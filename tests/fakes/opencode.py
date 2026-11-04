@@ -26,6 +26,16 @@ class FakeOpenCode:
         self.fail_prompt: int | None = None
         self.publish_on_prompt = True
         self.permission_request: tuple[str, str] | None = None
+        self.session_stats: dict[str, Any] = {
+            "cost": 0.03,
+            "tokens": {
+                "input": 40000,
+                "output": 500,
+                "reasoning": 0,
+                "cache": {"read": 2000, "write": 0},
+            },
+            "model": {"providerID": "go", "modelID": "flash"},
+        }
         self._next = 0
 
     # -- helpers ---------------------------------------------------------
@@ -68,6 +78,13 @@ class FakeOpenCode:
 
         if path == "/api/session" and method == "GET":
             return httpx.Response(200, json={"data": list(self.sessions.values())})
+
+        if method == "GET" and path.startswith("/api/session/"):
+            session_id = path.split("/")[3]
+            if session_id not in self.sessions:
+                return httpx.Response(404, json={"error": "SessionNotFound"})
+            payload = {"id": session_id, **self.session_stats}
+            return httpx.Response(200, json={"data": payload})
 
         if path.endswith("/prompt") and method == "POST":
             session_id = path.split("/")[3]
@@ -116,7 +133,16 @@ class FakeOpenCode:
         if path == "/api/model":
             return httpx.Response(
                 200,
-                json={"data": [{"providerID": "go", "modelID": "flash", "name": "Flash"}]},
+                json={
+                    "data": [
+                        {
+                            "providerID": "go",
+                            "modelID": "flash",
+                            "name": "Flash",
+                            "limit": {"context": 200000, "output": 32000},
+                        }
+                    ]
+                },
             )
 
         if path == "/api/agent":

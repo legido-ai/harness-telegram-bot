@@ -35,13 +35,16 @@ class HealthState:
     def payload(self) -> tuple[dict[str, Any], bool]:
         now = time.time()
         silent_for = now - self.last_update_at if self.last_update_at else None
-        healthy = bool(self.poller_alive) and (silent_for is None or silent_for < STALE_AFTER)
+        # Silence is normal: a bot nobody talks to receives no updates. Health
+        # tracks whether polling is alive, and reports staleness separately.
+        healthy = bool(self.poller_alive)
         return (
             {
                 "status": "ok" if healthy else "degraded",
                 "uptime_s": int(now - self.started_at),
                 "poller_alive": self.poller_alive,
                 "last_update_age_s": int(silent_for) if silent_for is not None else None,
+                "stale": silent_for is not None and silent_for > STALE_AFTER,
                 "sse_connected": self.sse_connected,
                 "agent_ok": self.agent_ok,
                 "rejections": self.rejections,

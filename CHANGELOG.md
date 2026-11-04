@@ -23,6 +23,8 @@ allowlisted humans, including a shared group conversation.
 - Permission requests and agent questions delivered as buttons; the first
   allowlisted human to answer decides, and the message records who.
 - Attachment intake for images, PDF and text under a configurable size limit.
+- Per-run footer with the model, context consumption (`42K/200K (21%)`), cost
+  and duration, read from `Session.Info` and the model catalogue.
 - `/status` and `/id` for operators and newcomers.
 - `GET /healthz` (poller + agent state), `GET /readyz`, and `GET /audit` (who
   asked, when, outcome — never message bodies).

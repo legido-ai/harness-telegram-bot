@@ -101,6 +101,22 @@ Adapter: `events()` async iterator yielding `Event(kind, session_id, payload)`.
 Reconnects with exponential backoff capped at 30 s; connection loss marks
 `/healthz` degraded but never loses the queue.
 
+## C11. Session info and context limits (footer)
+
+`GET /api/session/{sessionID}` → 200 `{"data": Session.Info}` where `Session.Info`
+carries `cost` (USD, number), `tokens` (`input`, `output`, `reasoning`,
+`cache.read`, `cache.write`) and `model` (`providerID`, `modelID`).
+
+`GET /api/model` → `Model.Info[]`; each entry has `limit.context` (integer,
+required together with `limit.output`).
+
+Adapter: `session(session_id)` and `context_limit(provider_id, model_id)`.
+
+The footer reports *context used* as `tokens.input + tokens.cache.read` against
+`limit.context`, plus `cost`, the model id and the run duration. The limit map is
+cached for the process life; a missing limit degrades the footer to `42K tok`
+instead of failing the run.
+
 ## C10. Error mapping
 
 | Server response | Adapter error | User-visible message |

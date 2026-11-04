@@ -32,6 +32,16 @@ def test_health_payload_never_contains_secrets(settings, store) -> None:
     assert settings.opencode_password not in body
 
 
+def test_idle_bot_is_healthy(settings, store) -> None:
+    state = HealthState(poller_alive=True)
+    state.note_update()
+    state.last_update_at -= 3600  # an hour of silence is not a failure
+    client = TestClient(create_app(settings, store, state))
+    response = client.get("/healthz")
+    assert response.status_code == 200
+    assert response.json()["stale"] is True
+
+
 def test_readyz_reports_schema(settings, store) -> None:
     client = TestClient(create_app(settings, store, HealthState()))
     response = client.get("/readyz")

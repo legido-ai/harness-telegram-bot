@@ -43,6 +43,7 @@ class OpenCodeClient:
             transport=transport,
             headers={"Accept": "application/json", "User-Agent": "opencode-telegram-bot/0.1"},
         )
+        self._limits: dict[str, int] | None = None
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -186,6 +187,39 @@ class OpenCodeClient:
         if isinstance(data, dict):
             data = data.get("agents") or data.get("items") or []
         return list(data or [])
+
+
+    # -- C11 session info and model context limits -----------------------
+
+    async def session(self, session_id: str) -> dict[str, Any]:
+        """Return ``Session.Info``: cost, token usage, current model."""
+
+        data = await self._json("GET", f"/api/session/{session_id}")
+        return data or {}
+
+    async def context_limits(self) -> dict[str, int]:
+        """Map ``provider/model`` to ``limit.context`` from the model catalogue.
+
+        Cached for the life of the process: model limits change when the agent
+        server restarts, not per run.
+        """
+
+        if self._limits is None:
+            limits: dict[str, int] = {}
+            for model in await self.models():
+                limit = model.get("limit")
+                context = limit.get("context") if isinstance(limit, dict) else None
+                provider = model.get("providerID")
+                model_id = model.get("modelID") or model.get("id")
+                if provider and model_id and isinstance(context, int) and context > 0:
+                    limits[f"{provider}/{model_id}"] = context
+            self._limits = limits
+        return self._limits
+
+    async def context_limit(self, provider_id: str | None, model_id: str | None) -> int | None:
+        if not provider_id or not model_id:
+            return None
+        return (await self.context_limits()).get(f"{provider_id}/{model_id}")
 
 
 def basic_auth_header(username: str, password: str) -> str:

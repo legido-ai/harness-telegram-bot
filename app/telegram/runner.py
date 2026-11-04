@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 
@@ -22,6 +23,7 @@ from app.opencode.events import (
     EventBus,
 )
 from app.store import Store
+from app.telegram.footer import RunStats, format_footer
 from app.telegram.identity import attribution_prefix, build_prompt
 from app.telegram.messenger import Messenger
 from app.telegram.streaming import StreamEditor
@@ -205,6 +207,8 @@ class Runner:
 
         status = "succeeded"
         error_kind: str | None = None
+        stats: RunStats | None = None
+        started_at = time.monotonic()
 
         try:
             await editor.start()
@@ -227,8 +231,13 @@ class Runner:
             finally:
                 self._bus.unsubscribe(session_id)
 
-            footer = self._footer(session_id, created)
-            await editor.finish(footer)
+            stats = await self._run_stats(
+                session_id,
+                created=created,
+                seconds=time.monotonic() - started_at,
+                model_hint=conversation.model,
+            )
+            await editor.finish(format_footer(stats))
         except SessionGone:
             self._store.clear_session(message.chat_id, message.thread_id)
             status, error_kind = "failed", "session_gone"
@@ -247,7 +256,13 @@ class Runner:
             await editor.finish("The agent server rejected that request.")
         finally:
             if turn_id:
-                self._store.finish_turn(turn_id, status, error_kind=error_kind)
+                self._store.finish_turn(
+                    turn_id,
+                    status,
+                    error_kind=error_kind,
+                    cost_usd=stats.cost_usd if stats else None,
+                    tokens=stats.used_tokens if stats else None,
+                )
             self._active_session.pop(key, None)
 
     async def _consume(
@@ -275,9 +290,53 @@ class Runner:
                         editor.append(text)
                 return
 
-    def _footer(self, session_id: str, created: bool) -> str:
-        short = session_id.split("_")[-1][:6] if "_" in session_id else session_id[:6]
-        return f"— session {short}{' (new)' if created else ''}"
+    async def _run_stats(
+        self,
+        session_id: str,
+        *,
+        created: bool,
+        seconds: float,
+        model_hint: dict[str, str] | None = None,
+    ) -> RunStats:
+        """Collect what the footer shows, degrading quietly when the server is shy."""
+
+        info: dict[str, object] = {}
+        try:
+            info = await self._client.session(session_id)
+        except OpenCodeError:
+            log.debug("session info unavailable for footer")
+
+        tokens = info.get("tokens") if isinstance(info.get("tokens"), dict) else {}
+        cache = tokens.get("cache") if isinstance(tokens.get("cache"), dict) else {}
+        used = None
+        if tokens:
+            total = int(tokens.get("input") or 0) + int(cache.get("read") or 0)
+            used = total or None
+
+        model_ref = info.get("model") if isinstance(info.get("model"), dict) else {}
+        provider = model_ref.get("providerID") or (model_hint or {}).get("providerID")
+        model_id = (
+            model_ref.get("modelID") or model_ref.get("id") or (model_hint or {}).get("modelID")
+        )
+
+        limit = None
+        try:
+            limit = await self._client.context_limit(provider, model_id)
+        except OpenCodeError:
+            log.debug("context limit unavailable for footer")
+
+        cost = info.get("cost")
+
+        return RunStats(
+            provider=provider,
+            model=model_id,
+            used_tokens=used,
+            limit_tokens=limit,
+            cost_usd=float(cost) if isinstance(cost, (int, float)) else None,
+            seconds=seconds,
+            session_id=session_id,
+            created=created,
+        )
 
     # -- abort -----------------------------------------------------------
 

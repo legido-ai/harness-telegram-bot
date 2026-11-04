@@ -76,3 +76,13 @@ async def test_duplicate_update_runs_once(bot_app: BotApp, fake_server) -> None:
     await send(bot_app, telegram_update)
     await wait_for(lambda: bot_app.store.mark_seen(7) is False)
     assert len(fake_server.prompts) == 1
+
+
+async def test_answer_carries_the_consumption_footer(bot_app: BotApp, messenger) -> None:
+    await send(bot_app, update("how are you", chat_type="private", chat_id=111, update_id=41))
+    await wait_for(lambda: any("(21%)" in item.text for item in messenger.edited))
+
+    footer_text = messenger.edited[-1].text
+    assert "42K/200K (21%)" in footer_text
+    assert "$0.03" in footer_text
+    assert "flash" in footer_text
