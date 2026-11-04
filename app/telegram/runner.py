@@ -76,6 +76,8 @@ class Runner:
         self._queues: dict[tuple[int, int], asyncio.Queue[Job]] = {}
         self._workers: dict[tuple[int, int], asyncio.Task[None]] = {}
         self._active_session: dict[tuple[int, int], str] = {}
+        self._last_label: dict[tuple[int, int], str] = {}
+        self._last_keyboard_at: dict[tuple[int, int], float] = {}
         self._started = False
 
     # -- lifecycle -------------------------------------------------------
@@ -270,6 +272,7 @@ class Runner:
                 error_kind = error_kind or ("agent_error" if failure else "empty_answer")
             await editor.finish(format_footer(stats))
             await self._refresh_dashboard(message, stats, status)
+            await self._push_keyboard(message, stats)
         except SessionGone:
             self._store.clear_session(message.chat_id, message.thread_id)
             status, error_kind = "failed", "session_gone"
@@ -361,21 +364,15 @@ class Runner:
             last_user=message.display_name,
             status=status,
         )
-        # A reply keyboard can only be replaced by a message carrying it, so the
-        # dashboard edit ships the keyboard too: that is what updates the label.
-        keyboard = self._keyboard_for(stats)
-
         existing = self._store.pinned_message_id(message.chat_id, message.thread_id)
         if existing:
             try:
-                await self.messenger.edit_text(
-                    message.chat_id, existing, text, keyboard=keyboard
-                )
+                await self.messenger.edit_text(message.chat_id, existing, text)
                 return existing
             except Exception as exc:  # deleted message, revoked rights: start over
                 log.warning("dashboard edit failed (%s); recreating", type(exc).__name__)
         message_id = await self.messenger.send_text(
-            message.chat_id, text, thread_id=message.thread_id, keyboard=keyboard
+            message.chat_id, text, thread_id=message.thread_id
         )
         if existing and existing != message_id:
             await self.messenger.unpin(message.chat_id, existing)
@@ -383,6 +380,27 @@ class Runner:
         self._store.set_pinned_message_id(message.chat_id, message.thread_id, message_id)
         await self.messenger.pin(message.chat_id, message_id)
         return message_id
+
+    async def _push_keyboard(self, message: Inbound, stats: RunStats | None) -> None:
+        if self.messenger is None:
+            return
+        label = context_label(
+            stats.used_tokens if stats else None, stats.limit_tokens if stats else None
+        )
+        key = message.key
+        now = time.monotonic()
+        if self._last_label.get(key) == label:
+            return
+        if now - self._last_keyboard_at.get(key, 0.0) < 2.0:
+            return
+        self._last_label[key] = label
+        self._last_keyboard_at[key] = now
+        await self.messenger.send_text(
+            message.chat_id,
+            "⌨️ Keyboard updated",
+            thread_id=message.thread_id,
+            keyboard=main_menu(label),
+        )
 
     @staticmethod
     def _keyboard_for(stats: RunStats | None) -> Any:
@@ -404,6 +422,7 @@ class Runner:
                 session_id, created=False, seconds=None, model_hint=conversation.model
             )
         await self._refresh_dashboard(message, stats or RunStats(), "idle")
+        await self._push_keyboard(message, stats)
 
     async def keyboard(self, message: Inbound) -> Any:
         """Keyboard carrying the current usage, for on-demand commands."""
