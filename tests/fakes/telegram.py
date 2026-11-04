@@ -31,6 +31,8 @@ class FakeMessenger:
     callbacks: list[tuple[str, str]] = field(default_factory=list)
     pinned: list[tuple[int, int]] = field(default_factory=list)
     unpinned: list[tuple[int, int]] = field(default_factory=list)
+    unpinned_all: list[int] = field(default_factory=list)
+    deleted: list[tuple[int, int]] = field(default_factory=list)
     typing: list[tuple[int, int]] = field(default_factory=list)
     _next_id: int = 100
 
@@ -79,6 +81,12 @@ class FakeMessenger:
 
     async def unpin(self, chat_id: int, message_id: int) -> None:
         self.unpinned.append((chat_id, message_id))
+
+    async def unpin_all(self, chat_id: int) -> None:
+        self.unpinned_all.append(chat_id)
+
+    async def delete_message(self, chat_id: int, message_id: int) -> None:
+        self.deleted.append((chat_id, message_id))
 
     @property
     def last_text(self) -> str:

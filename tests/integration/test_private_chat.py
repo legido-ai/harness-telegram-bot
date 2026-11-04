@@ -164,3 +164,14 @@ async def test_typing_indicator_replaces_the_placeholder(bot_app: BotApp, messen
     await wait_for(lambda: bool(messenger.typing))
     assert messenger.typing[0][0] == 111
     assert all("…" not in item.text for item in messenger.sent)
+
+
+async def test_new_session_resets_the_context_counter(bot_app: BotApp, messenger) -> None:
+    await send(bot_app, update("hello", chat_type="private", chat_id=111, update_id=111))
+    await wait_for(lambda: bool(messenger.pinned))
+
+    await bot_app._cmd_new(
+        bot_app._inbound(update("/new", chat_type="private", chat_id=111, update_id=112)), ""
+    )
+    await wait_for(lambda: any("context 0/200K (0%)" in item.text for item in messenger.edited))
+    assert messenger.edited[-1].keyboard is not None

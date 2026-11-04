@@ -85,7 +85,7 @@ class FakeOpenCode:
 
         if path.endswith("/context") and method == "GET":
             session_id = path.split("/")[3]
-            if not self.prompts:
+            if not any(prompt[0] == session_id for prompt in self.prompts):
                 # A session with no turns has no occupancy and no cost yet.
                 return httpx.Response(200, json={"data": []})
             return httpx.Response(
@@ -118,7 +118,7 @@ class FakeOpenCode:
             if session_id not in self.sessions:
                 return httpx.Response(404, json={"error": "SessionNotFound"})
             payload = {"id": session_id, **self.session_stats}
-            if not self.prompts:
+            if not any(prompt[0] == session_id for prompt in self.prompts):
                 payload = {"id": session_id, "cost": 0, "model": None, "tokens": None}
             return httpx.Response(200, json={"data": payload})
 

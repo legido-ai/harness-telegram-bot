@@ -31,11 +31,14 @@ def dashboard_text(
 
     lines.append(f"session {_short(stats.session_id)} · {stats.model or 'server default'}")
 
-    if stats.used_tokens and stats.limit_tokens:
-        percent = stats.percent or 0
-        lines.append(f"context {format_tokens(stats.used_tokens)}/{format_tokens(stats.limit_tokens)} ({percent}%)")
-    elif stats.used_tokens:
-        lines.append(f"context {format_tokens(stats.used_tokens)} tokens")
+    used = stats.used_tokens or 0
+    if stats.limit_tokens:
+        percent = round(used / stats.limit_tokens * 100)
+        lines.append(
+            f"context {format_tokens(used)}/{format_tokens(stats.limit_tokens)} ({percent}%)"
+        )
+    elif used:
+        lines.append(f"context {format_tokens(used)} tokens")
 
     tail = []
     if stats.cost_usd:

@@ -98,6 +98,18 @@ class TelegramMessenger:
         except Exception as exc:
             log.debug("could not unpin the old dashboard: %s", type(exc).__name__)
 
+    async def unpin_all(self, chat_id: int) -> None:
+        try:
+            await self._bot.unpin_all_chat_messages(chat_id=chat_id)
+        except Exception as exc:
+            log.debug("could not unpin all: %s", type(exc).__name__)
+
+    async def delete_message(self, chat_id: int, message_id: int) -> None:
+        try:
+            await self._bot.delete_message(chat_id=chat_id, message_id=message_id)
+        except Exception as exc:
+            log.debug("could not delete %s: %s", message_id, type(exc).__name__)
+
     async def pin(self, chat_id: int, message_id: int) -> None:
         try:
             await self._bot.pin_chat_message(

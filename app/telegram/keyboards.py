@@ -22,9 +22,9 @@ CONTEXT_EMPTY = "📊 0"
 def context_label(used: int | None, limit: int | None) -> str:
     """The context button *shows* the usage: 📊 6K / 1.0M (1%)."""
 
-    if used and limit:
-        percent = round(used / limit * 100)
-        return f"📊 {format_tokens(used)} / {format_tokens(limit)} ({percent}%)"
+    if limit:
+        percent = round((used or 0) / limit * 100)
+        return f"📊 {format_tokens(used or 0)} / {format_tokens(limit)} ({percent}%)"
     if used:
         return f"📊 {format_tokens(used)}"
     return CONTEXT_EMPTY

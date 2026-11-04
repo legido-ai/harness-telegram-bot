@@ -170,7 +170,12 @@ class BotApp:
 
     async def _cmd_new(self, message: Inbound, argument: str) -> None:
         session_id, _ = await self.runner.new_session(message, message.user_id)
-        await self._reply(message, f"New session: {session_id[-6:]}")
+        await self._reply(
+            message,
+            f"New session: {session_id[-6:]}",
+            await self.runner.keyboard(message),
+        )
+        await self.runner.refresh_dashboard(message)
 
     async def _cmd_context(self, message: Inbound, argument: str) -> None:
         await self._reply(
@@ -396,6 +401,7 @@ class BotApp:
                 await self.messenger.answer_callback(message.callback_id or "", "Wrong conversation.")
             return
         self.store.bind_session(chat_id, thread_id, session_id, None, bound_by=message.user_id)
+        await self.runner.refresh_dashboard(message)
         if self.messenger:
             await self.messenger.answer_callback(message.callback_id or "", "Switched.")
             await self.messenger.edit_text(

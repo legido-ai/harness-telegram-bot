@@ -50,6 +50,7 @@ def test_context_button_label_shows_usage() -> None:
     assert context_label(6000, 1_000_000) == "📊 6K / 1.0M (1%)"
     assert context_label(None, None) == "📊 0"
     assert context_label(6000, None) == "📊 6K"
+    assert context_label(0, 1_000_000) == "📊 0 / 1.0M (0%)"
 
 
 def test_buttons_match_by_icon_after_relabelling() -> None:

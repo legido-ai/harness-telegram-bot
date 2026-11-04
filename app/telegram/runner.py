@@ -379,6 +379,7 @@ class Runner:
         )
         if existing and existing != message_id:
             await self.messenger.unpin(message.chat_id, existing)
+            await self.messenger.delete_message(message.chat_id, existing)
         self._store.set_pinned_message_id(message.chat_id, message.thread_id, message_id)
         await self.messenger.pin(message.chat_id, message_id)
         return message_id
@@ -391,6 +392,18 @@ class Runner:
                 stats.limit_tokens if stats else None,
             )
         )
+
+    async def refresh_dashboard(self, message: Inbound) -> None:
+        """Redraw the pinned card for the current binding (after /new, /switch)."""
+
+        conversation = self._store.get_conversation(message.chat_id, message.thread_id)
+        session_id = conversation.active_session_id if conversation else None
+        stats = None
+        if session_id:
+            stats = await self._run_stats(
+                session_id, created=False, seconds=None, model_hint=conversation.model
+            )
+        await self._refresh_dashboard(message, stats or RunStats(), "idle")
 
     async def keyboard(self, message: Inbound) -> Any:
         """Keyboard carrying the current usage, for on-demand commands."""
