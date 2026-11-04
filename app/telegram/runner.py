@@ -322,23 +322,44 @@ class Runner:
 
         conversation = self._store.get_conversation(message.chat_id, message.thread_id)
         session_id = conversation.active_session_id if conversation else None
-        if not session_id:
-            return "no session yet — send a message and one is created"
-        stats = await self._run_stats(
-            session_id,
-            created=False,
-            seconds=None,
-            model_hint=conversation.model if conversation else None,
-        )
-        parts = [stats.model or "server default"]
-        if stats.used_tokens and stats.limit_tokens:
-            used = format_tokens(stats.used_tokens)
-            limit = format_tokens(stats.limit_tokens)
-            parts.append(f"{used}/{limit} ({stats.percent or 0}%)")
-        elif stats.used_tokens:
-            parts.append(f"{format_tokens(stats.used_tokens)} tokens")
-        if stats.cost_usd:
-            parts.append(format_cost(stats.cost_usd))
+
+        stats: RunStats | None = None
+        if session_id:
+            stats = await self._run_stats(
+                session_id,
+                created=False,
+                seconds=None,
+                model_hint=conversation.model if conversation else None,
+            )
+
+        provider = stats.provider if stats else None
+        model = stats.model if stats else None
+        used = (stats.used_tokens if stats else None) or 0
+        limit = stats.limit_tokens if stats else None
+        cost = stats.cost_usd if stats else None
+
+        # An empty session has no model and no usage yet. Show what would be
+        # used, at 0 of its window, instead of "server default" with no numbers.
+        if not model:
+            try:
+                default = await self._client.default_model()
+            except OpenCodeError:
+                default = {}
+            provider = provider or default.get("providerID")
+            model = model or default.get("modelID")
+        if limit is None:
+            try:
+                limit = await self._client.context_limit(provider, model)
+            except OpenCodeError:
+                limit = None
+
+        parts = [model or "server default"]
+        if limit:
+            parts.append(f"{format_tokens(used)}/{format_tokens(limit)} ({round(used / limit * 100)}%)")
+        elif used:
+            parts.append(f"{format_tokens(used)} tokens")
+        if cost:
+            parts.append(format_cost(cost))
         parts.append(f"queued {self.queue_depth(message.key)}")
         return " · ".join(parts)
 

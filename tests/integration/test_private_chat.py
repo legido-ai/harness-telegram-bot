@@ -130,3 +130,19 @@ async def test_context_command_mirrors_the_status_bar(bot_app: BotApp, messenger
 def store_has_session(bot_app: BotApp) -> bool:
     conversation = bot_app.store.get_conversation(111, 0)
     return bool(conversation and conversation.active_session_id)
+
+
+async def test_context_always_shows_used_and_window(bot_app: BotApp, messenger, store) -> None:
+    await bot_app._cmd_new(bot_app._inbound(update("/new", chat_type="private", chat_id=111, update_id=81)), "")
+    inbound = bot_app._inbound(update("/context", chat_type="private", chat_id=111, update_id=82))
+    await bot_app._cmd_context(inbound, "")
+    line = messenger.sent[-1].text
+    assert "0/200K (0%)" in line, line
+    assert "server default" not in line
+
+
+async def test_fresh_session_reports_no_cost(bot_app: BotApp, messenger) -> None:
+    await bot_app._cmd_new(bot_app._inbound(update("/new", chat_type="private", chat_id=111, update_id=83)), "")
+    inbound = bot_app._inbound(update("/context", chat_type="private", chat_id=111, update_id=84))
+    await bot_app._cmd_context(inbound, "")
+    assert "$" not in messenger.sent[-1].text

@@ -81,6 +81,9 @@ class FakeOpenCode:
 
         if path.endswith("/context") and method == "GET":
             session_id = path.split("/")[3]
+            if not self.prompts:
+                # A session with no turns has no occupancy and no cost yet.
+                return httpx.Response(200, json={"data": []})
             return httpx.Response(
                 200,
                 json={
@@ -106,6 +109,8 @@ class FakeOpenCode:
             if session_id not in self.sessions:
                 return httpx.Response(404, json={"error": "SessionNotFound"})
             payload = {"id": session_id, **self.session_stats}
+            if not self.prompts:
+                payload = {"id": session_id, "cost": 0, "model": None, "tokens": None}
             return httpx.Response(200, json={"data": payload})
 
         if path.endswith("/prompt") and method == "POST":
@@ -151,6 +156,11 @@ class FakeOpenCode:
             body = json.loads(request.content or b"{}")
             self.agent_calls.append((session_id, body["agent"]))
             return httpx.Response(204)
+
+        if path == "/api/model/default":
+            return httpx.Response(
+                200, json={"data": {"providerID": "go", "modelID": "flash", "id": "flash"}}
+            )
 
         if path == "/api/model":
             return httpx.Response(

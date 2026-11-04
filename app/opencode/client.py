@@ -216,6 +216,12 @@ class OpenCodeClient:
             self._limits = limits
         return self._limits
 
+    async def default_model(self) -> dict[str, Any]:
+        """The model the server would use when a session has not chosen one."""
+
+        data = await self._json("GET", "/api/model/default")
+        return data if isinstance(data, dict) else {}
+
     async def context_usage(self, session_id: str) -> dict[str, Any]:
         """Return the prompt size of the last finished assistant message.
 
