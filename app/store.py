@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 DDL = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -174,6 +174,15 @@ class Store:
             self._conn.executescript(DDL)
             row = self._conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
             current = int(row["value"]) if row else 0
+            if current < 2:
+                columns = {
+                    row["name"]
+                    for row in self._conn.execute("PRAGMA table_info(conversations)").fetchall()
+                }
+                if "pinned_message_id" not in columns:
+                    self._conn.execute(
+                        "ALTER TABLE conversations ADD COLUMN pinned_message_id INTEGER"
+                    )
             if current < SCHEMA_VERSION:
                 self._conn.execute(
                     "INSERT OR REPLACE INTO meta(key, value) VALUES('schema_version', ?)",
@@ -258,6 +267,21 @@ class Store:
             self._conn.execute(
                 f"UPDATE conversations SET {column}=?, updated_at=? WHERE chat_id=? AND thread_id=?",
                 (value, _now(), chat_id, thread_id),
+            )
+
+    def pinned_message_id(self, chat_id: int, thread_id: int) -> int | None:
+        row = self._conn.execute(
+            "SELECT pinned_message_id FROM conversations WHERE chat_id=? AND thread_id=?",
+            (chat_id, thread_id),
+        ).fetchone()
+        return row["pinned_message_id"] if row and row["pinned_message_id"] else None
+
+    def set_pinned_message_id(self, chat_id: int, thread_id: int, message_id: int) -> None:
+        with self._conn:
+            self._conn.execute(
+                "UPDATE conversations SET pinned_message_id=?, updated_at=? "
+                "WHERE chat_id=? AND thread_id=?",
+                (message_id, _now(), chat_id, thread_id),
             )
 
     def set_trigger_policy(self, chat_id: int, thread_id: int, policy: str) -> None:

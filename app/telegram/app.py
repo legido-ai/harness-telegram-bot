@@ -96,6 +96,11 @@ class BotApp:
         self.state.note_update()
         self.authorizer.register(message)
 
+        # The persistent keyboard sends plain labels; treat them as commands.
+        if (menu_command := keyboards.menu_command(message.text)) is not None:
+            await self._handle_command(message, menu_command)
+            return
+
         conversation = self.store.touch_conversation(
             message.chat_id, message.thread_id, message.chat_type, message.chat_title
         )
@@ -143,10 +148,10 @@ class BotApp:
         )
 
     async def _cmd_start(self, message: Inbound, argument: str) -> None:
-        await self._reply(message, commands.help_text(self.bot_username))
+        await self._reply(message, commands.help_text(self.bot_username), keyboards.main_menu())
 
     async def _cmd_help(self, message: Inbound, argument: str) -> None:
-        await self._reply(message, commands.help_text(self.bot_username))
+        await self._reply(message, commands.help_text(self.bot_username), keyboards.main_menu())
 
     async def _cmd_id(self, message: Inbound, argument: str) -> None:
         await self._reply(message, commands.id_text(message))

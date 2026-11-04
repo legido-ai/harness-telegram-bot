@@ -13,6 +13,33 @@ def _markup(rows: list[list[tuple[str, str]]]) -> Any:
     )
 
 
+MENU = (
+    ("📊 Status", "/status"),
+    ("🆕 New", "/new"),
+    ("📚 Sessions", "/sessions"),
+    ("⏹ Abort", "/abort"),
+)
+
+
+def main_menu() -> Any:
+    """Persistent bottom keyboard, so the common actions need no typing."""
+
+    from telegram import KeyboardButton, ReplyKeyboardMarkup
+
+    return ReplyKeyboardMarkup(
+        [[KeyboardButton(label)] for label, _ in MENU],
+        resize_keyboard=True,
+        is_persistent=True,
+    )
+
+
+def menu_command(text: str) -> str | None:
+    for label, command in MENU:
+        if text.strip() == label:
+            return command
+    return None
+
+
 def permission_keyboard(session_id: str, request_id: str) -> Any:
     return _markup(
         [

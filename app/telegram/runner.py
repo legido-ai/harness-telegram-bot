@@ -23,6 +23,7 @@ from app.opencode.events import (
     EventBus,
 )
 from app.store import Store
+from app.telegram.dashboard import dashboard_text
 from app.telegram.footer import RunStats, format_footer
 from app.telegram.identity import attribution_prefix, build_prompt
 from app.telegram.messenger import Messenger
@@ -203,6 +204,7 @@ class Runner:
             thread_id=message.thread_id,
             reply_to=message.message_id if message.is_private else None,
             prefix=attribution_prefix(message, len(participants)),
+            markdown=True,
         )
 
         status = "succeeded"
@@ -238,6 +240,7 @@ class Runner:
                 model_hint=conversation.model,
             )
             await editor.finish(format_footer(stats))
+            await self._refresh_dashboard(message, stats)
         except SessionGone:
             self._store.clear_session(message.chat_id, message.thread_id)
             status, error_kind = "failed", "session_gone"
@@ -289,6 +292,30 @@ class Runner:
                     if text and not editor.text.strip():
                         editor.append(text)
                 return
+
+    async def _refresh_dashboard(self, message: Inbound, stats: RunStats) -> None:
+        """Keep the pinned card current: one message per conversation, edited."""
+
+        if self.messenger is None:
+            return
+        text = dashboard_text(
+            title=message.chat_title or message.display_name,
+            stats=stats,
+            queue_depth=self.queue_depth(message.key),
+            last_user=message.display_name,
+        )
+        existing = self._store.pinned_message_id(message.chat_id, message.thread_id)
+        if existing:
+            try:
+                await self.messenger.edit_text(message.chat_id, existing, text)
+                return
+            except Exception:  # deleted message, revoked rights: start over
+                log.debug("dashboard edit failed; recreating")
+        message_id = await self.messenger.send_text(
+            message.chat_id, text, thread_id=message.thread_id
+        )
+        self._store.set_pinned_message_id(message.chat_id, message.thread_id, message_id)
+        await self.messenger.pin(message.chat_id, message_id)
 
     async def _run_stats(
         self,

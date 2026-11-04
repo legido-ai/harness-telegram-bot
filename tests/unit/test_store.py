@@ -4,9 +4,9 @@ from app.store import Store
 
 
 def test_migration_is_idempotent(store: Store) -> None:
-    assert store.schema_version() == 1
+    assert store.schema_version() == 2
     store.migrate()
-    assert store.schema_version() == 1
+    assert store.schema_version() == 2
 
 
 def test_delivery_ledger_dedupes_updates(store: Store) -> None:

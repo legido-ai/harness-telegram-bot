@@ -86,3 +86,30 @@ async def test_answer_carries_the_consumption_footer(bot_app: BotApp, messenger)
     assert "42K/200K (21%)" in footer_text
     assert "$0.03" in footer_text
     assert "flash" in footer_text
+
+
+async def test_run_updates_and_pins_a_dashboard(bot_app: BotApp, messenger, store) -> None:
+    await send(bot_app, update("ping", chat_type="private", chat_id=111, update_id=51))
+    await wait_for(lambda: bool(messenger.pinned))
+
+    dashboard = [item for item in messenger.sent if item.text.startswith("📊")]
+    assert dashboard, "no dashboard message"
+    assert "context 42K/200K (21%)" in dashboard[0].text
+    assert store.pinned_message_id(111, 0) == messenger.pinned[0][1]
+
+
+async def test_second_run_edits_the_same_dashboard(bot_app: BotApp, messenger) -> None:
+    await send(bot_app, update("one", chat_type="private", chat_id=111, update_id=61))
+    await wait_for(lambda: bool(messenger.pinned))
+    pinned_once = len(messenger.pinned)
+
+    await send(bot_app, update("two", chat_type="private", chat_id=111, update_id=62))
+    await wait_for(lambda: sum("📊" in item.text for item in messenger.edited) > 0)
+    assert len(messenger.pinned) == pinned_once
+
+
+def test_menu_labels_map_to_commands() -> None:
+    from app.telegram.keyboards import menu_command
+
+    assert menu_command("📚 Sessions") == "/sessions"
+    assert menu_command("hello") is None

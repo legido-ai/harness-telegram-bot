@@ -29,6 +29,7 @@ class FakeMessenger:
     sent: list[Sent] = field(default_factory=list)
     edited: list[Edited] = field(default_factory=list)
     callbacks: list[tuple[str, str]] = field(default_factory=list)
+    pinned: list[tuple[int, int]] = field(default_factory=list)
     _next_id: int = 100
 
     async def send_text(
@@ -67,6 +68,9 @@ class FakeMessenger:
 
     async def answer_callback(self, callback_id: str, text: str | None = None) -> None:
         self.callbacks.append((callback_id, text or ""))
+
+    async def pin(self, chat_id: int, message_id: int) -> None:
+        self.pinned.append((chat_id, message_id))
 
     @property
     def last_text(self) -> str:

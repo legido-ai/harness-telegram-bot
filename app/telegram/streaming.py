@@ -63,6 +63,7 @@ class StreamEditor:
         min_interval: float = 1.0,
         now: Callable[[], float] = time.monotonic,
         prefix: str = "",
+        markdown: bool = False,
     ) -> None:
         self._send = send
         self._edit = edit
@@ -72,6 +73,7 @@ class StreamEditor:
         self._interval = min_interval
         self._now = _Clock(now)
         self._prefix = prefix
+        self._markdown = markdown
         self._buffer = ""
         self._sent: list[str] = []
         self._message_ids: list[int] = []
@@ -107,7 +109,11 @@ class StreamEditor:
         self._started = True
         text = self._compose(0) or "…"
         message_id = await self._send(
-            self._chat_id, text, thread_id=self._thread_id, reply_to=self._reply_to
+            self._chat_id,
+            text,
+            thread_id=self._thread_id,
+            reply_to=self._reply_to,
+            markdown=self._markdown,
         )
         self._message_ids.append(message_id)
         self._sent.append(text)
@@ -127,11 +133,17 @@ class StreamEditor:
             if index < len(self._message_ids):
                 if index < len(self._sent) and self._sent[index] == rendered:
                     continue
-                await self._edit(self._chat_id, self._message_ids[index], rendered)
+                await self._edit(
+                    self._chat_id, self._message_ids[index], rendered, markdown=self._markdown
+                )
                 self._sent[index] = rendered
             else:
                 message_id = await self._send(
-                    self._chat_id, rendered, thread_id=self._thread_id, reply_to=self._reply_to
+                    self._chat_id,
+                    rendered,
+                    thread_id=self._thread_id,
+                    reply_to=self._reply_to,
+                    markdown=self._markdown,
                 )
                 self._message_ids.append(message_id)
                 self._sent.append(rendered)
