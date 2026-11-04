@@ -24,7 +24,7 @@ from app.opencode.events import (
 )
 from app.store import Store
 from app.telegram.dashboard import dashboard_text
-from app.telegram.footer import RunStats, format_footer
+from app.telegram.footer import RunStats, format_cost, format_footer, format_tokens
 from app.telegram.identity import attribution_prefix, build_prompt
 from app.telegram.messenger import Messenger
 from app.telegram.streaming import StreamEditor
@@ -316,6 +316,31 @@ class Runner:
         )
         self._store.set_pinned_message_id(message.chat_id, message.thread_id, message_id)
         await self.messenger.pin(message.chat_id, message_id)
+
+    async def context_line(self, message: Inbound) -> str:
+        """One line for the chat, mirroring the status bar of the TUI."""
+
+        conversation = self._store.get_conversation(message.chat_id, message.thread_id)
+        session_id = conversation.active_session_id if conversation else None
+        if not session_id:
+            return "no session yet — send a message and one is created"
+        stats = await self._run_stats(
+            session_id,
+            created=False,
+            seconds=None,
+            model_hint=conversation.model if conversation else None,
+        )
+        parts = [stats.model or "server default"]
+        if stats.used_tokens and stats.limit_tokens:
+            used = format_tokens(stats.used_tokens)
+            limit = format_tokens(stats.limit_tokens)
+            parts.append(f"{used}/{limit} ({stats.percent or 0}%)")
+        elif stats.used_tokens:
+            parts.append(f"{format_tokens(stats.used_tokens)} tokens")
+        if stats.cost_usd:
+            parts.append(format_cost(stats.cost_usd))
+        parts.append(f"queued {self.queue_depth(message.key)}")
+        return " · ".join(parts)
 
     async def _run_stats(
         self,

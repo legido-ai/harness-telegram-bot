@@ -11,6 +11,8 @@ Private chat: just write what you want done.
 Group: mention me (@{username}) or reply to one of my messages. I ignore
 conversation that is not addressed to me.
 
+The two buttons below the input: model picker and context usage.
+
 /new            start a fresh session in this conversation
 /sessions       list recent sessions and switch
 /abort          stop the run that is in progress

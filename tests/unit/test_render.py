@@ -34,3 +34,11 @@ def test_empty_answer_stays_empty() -> None:
 def test_strip_html_returns_what_a_user_reads() -> None:
     rendered = render_markdown("**bold** and `code`")
     assert strip_html(rendered) == "bold and code"
+
+
+def test_keyboard_is_one_row_with_two_blocks() -> None:
+    from app.telegram.keyboards import main_menu
+
+    markup = main_menu()
+    assert len(markup.keyboard) == 1
+    assert [button.text for button in markup.keyboard[0]] == ["🧠 Model", "📊 Context"]

@@ -160,6 +160,9 @@ class BotApp:
         session_id, _ = await self.runner.new_session(message, message.user_id)
         await self._reply(message, f"New session: {session_id[-6:]}")
 
+    async def _cmd_context(self, message: Inbound, argument: str) -> None:
+        await self._reply(message, await self.runner.context_line(message))
+
     async def _cmd_status(self, message: Inbound, argument: str) -> None:
         await self._reply(message, self.runner.status_line(message))
 

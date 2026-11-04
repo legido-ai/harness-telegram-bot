@@ -14,20 +14,22 @@ def _markup(rows: list[list[tuple[str, str]]]) -> Any:
 
 
 MENU = (
-    ("📊 Status", "/status"),
-    ("🆕 New", "/new"),
-    ("📚 Sessions", "/sessions"),
-    ("⏹ Abort", "/abort"),
+    ("🧠 Model", "/model"),
+    ("📊 Context", "/context"),
 )
 
 
 def main_menu() -> Any:
-    """Persistent bottom keyboard, so the common actions need no typing."""
+    """One row, two blocks: model picker and context usage.
+
+    Commands stay available by typing; the keyboard only carries what is worth
+    reaching without leaving the conversation.
+    """
 
     from telegram import KeyboardButton, ReplyKeyboardMarkup
 
     return ReplyKeyboardMarkup(
-        [[KeyboardButton(label)] for label, _ in MENU],
+        [[KeyboardButton(label) for label, _ in MENU]],
         resize_keyboard=True,
         is_persistent=True,
     )

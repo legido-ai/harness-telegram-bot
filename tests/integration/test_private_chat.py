@@ -111,5 +111,22 @@ async def test_second_run_edits_the_same_dashboard(bot_app: BotApp, messenger) -
 def test_menu_labels_map_to_commands() -> None:
     from app.telegram.keyboards import menu_command
 
-    assert menu_command("📚 Sessions") == "/sessions"
+    assert menu_command("🧠 Model") == "/model"
+    assert menu_command("📊 Context") == "/context"
     assert menu_command("hello") is None
+
+
+async def test_context_command_mirrors_the_status_bar(bot_app: BotApp, messenger) -> None:
+    await send(bot_app, update("hello", chat_type="private", chat_id=111, update_id=71))
+    await wait_for(lambda: len(bot_app.runner.active_sessions) == 0 and store_has_session(bot_app))
+
+    inbound = bot_app._inbound(update("/context", chat_type="private", chat_id=111, update_id=72))
+    await bot_app._cmd_context(inbound, "")
+    line = messenger.sent[-1].text
+    assert "42K/200K (21%)" in line
+    assert "queued 0" in line
+
+
+def store_has_session(bot_app: BotApp) -> bool:
+    conversation = bot_app.store.get_conversation(111, 0)
+    return bool(conversation and conversation.active_session_id)
