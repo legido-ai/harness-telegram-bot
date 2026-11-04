@@ -152,10 +152,18 @@ class BotApp:
         )
 
     async def _cmd_start(self, message: Inbound, argument: str) -> None:
-        await self._reply(message, commands.help_text(self.bot_username), keyboards.main_menu())
+        await self._reply(
+            message,
+            commands.help_text(self.bot_username),
+            await self.runner.keyboard(message),
+        )
 
     async def _cmd_help(self, message: Inbound, argument: str) -> None:
-        await self._reply(message, commands.help_text(self.bot_username), keyboards.main_menu())
+        await self._reply(
+            message,
+            commands.help_text(self.bot_username),
+            await self.runner.keyboard(message),
+        )
 
     async def _cmd_id(self, message: Inbound, argument: str) -> None:
         await self._reply(message, commands.id_text(message))
@@ -165,8 +173,11 @@ class BotApp:
         await self._reply(message, f"New session: {session_id[-6:]}")
 
     async def _cmd_context(self, message: Inbound, argument: str) -> None:
-        await self._reply(message, await self.runner.context_line(message))
-        await self.runner.refresh_keyboard(message)
+        await self._reply(
+            message,
+            await self.runner.context_line(message),
+            await self.runner.keyboard(message),
+        )
 
     async def _cmd_status(self, message: Inbound, argument: str) -> None:
         await self._reply(message, self.runner.status_line(message))

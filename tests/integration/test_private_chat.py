@@ -96,6 +96,8 @@ async def test_run_updates_and_pins_a_dashboard(bot_app: BotApp, messenger, stor
     assert dashboard, "no dashboard message"
     assert "context 42K/200K (21%)" in dashboard[0].text
     assert store.pinned_message_id(111, 0) == messenger.pinned[0][1]
+    labels = [button.text for row in dashboard[0].keyboard.keyboard for button in row]
+    assert labels == ["🧠 Model", "📊 42K / 200K (21%)"]
 
 
 async def test_second_run_edits_the_same_dashboard(bot_app: BotApp, messenger) -> None:

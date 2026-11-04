@@ -30,8 +30,8 @@ class FakeMessenger:
     edited: list[Edited] = field(default_factory=list)
     callbacks: list[tuple[str, str]] = field(default_factory=list)
     pinned: list[tuple[int, int]] = field(default_factory=list)
+    unpinned: list[tuple[int, int]] = field(default_factory=list)
     typing: list[tuple[int, int]] = field(default_factory=list)
-    keyboards: list[tuple[int, int, Any]] = field(default_factory=list)
     _next_id: int = 100
 
     async def send_text(
@@ -71,14 +71,14 @@ class FakeMessenger:
     async def answer_callback(self, callback_id: str, text: str | None = None) -> None:
         self.callbacks.append((callback_id, text or ""))
 
-    async def set_reply_keyboard(self, chat_id: int, message_id: int, keyboard: Any) -> None:
-        self.keyboards.append((chat_id, message_id, keyboard))
-
     async def send_typing(self, chat_id: int, thread_id: int = 0) -> None:
         self.typing.append((chat_id, thread_id))
 
     async def pin(self, chat_id: int, message_id: int) -> None:
         self.pinned.append((chat_id, message_id))
+
+    async def unpin(self, chat_id: int, message_id: int) -> None:
+        self.unpinned.append((chat_id, message_id))
 
     @property
     def last_text(self) -> str:

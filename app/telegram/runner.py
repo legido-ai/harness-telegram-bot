@@ -11,6 +11,7 @@ import logging
 import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 from app.config import Settings
 from app.opencode.client import OpenCodeClient
@@ -360,46 +361,40 @@ class Runner:
             last_user=message.display_name,
             status=status,
         )
+        # A reply keyboard can only be replaced by a message carrying it, so the
+        # dashboard edit ships the keyboard too: that is what updates the label.
+        keyboard = self._keyboard_for(stats)
+
         existing = self._store.pinned_message_id(message.chat_id, message.thread_id)
         if existing:
             try:
                 await self.messenger.edit_text(
-                    message.chat_id,
-                    existing,
-                    text,
+                    message.chat_id, existing, text, keyboard=keyboard
                 )
-                await self._refresh_keyboard(message, existing, stats)
                 return existing
-            except Exception:  # deleted message, revoked rights: start over
-                log.debug("dashboard edit failed; recreating")
+            except Exception as exc:  # deleted message, revoked rights: start over
+                log.warning("dashboard edit failed (%s); recreating", type(exc).__name__)
         message_id = await self.messenger.send_text(
-            message.chat_id, text, thread_id=message.thread_id
+            message.chat_id, text, thread_id=message.thread_id, keyboard=keyboard
         )
+        if existing and existing != message_id:
+            await self.messenger.unpin(message.chat_id, existing)
         self._store.set_pinned_message_id(message.chat_id, message.thread_id, message_id)
         await self.messenger.pin(message.chat_id, message_id)
-        await self._refresh_keyboard(message, message_id, stats)
         return message_id
 
-    async def _refresh_keyboard(
-        self, message: Inbound, message_id: int, stats: RunStats | None
-    ) -> None:
-        if self.messenger is None:
-            return
-        label = context_label(
-            stats.used_tokens if stats else None, stats.limit_tokens if stats else None
-        )
-        await self.messenger.set_reply_keyboard(
-            message.chat_id, message_id, main_menu(label)
+    @staticmethod
+    def _keyboard_for(stats: RunStats | None) -> Any:
+        return main_menu(
+            context_label(
+                stats.used_tokens if stats else None,
+                stats.limit_tokens if stats else None,
+            )
         )
 
-    async def refresh_keyboard(self, message: Inbound) -> None:
-        """Recompute the context button for an on-demand command."""
+    async def keyboard(self, message: Inbound) -> Any:
+        """Keyboard carrying the current usage, for on-demand commands."""
 
-        if self.messenger is None:
-            return
-        message_id = self._store.pinned_message_id(message.chat_id, message.thread_id)
-        if not message_id:
-            return
         conversation = self._store.get_conversation(message.chat_id, message.thread_id)
         session_id = conversation.active_session_id if conversation else None
         stats = None
@@ -407,7 +402,7 @@ class Runner:
             stats = await self._run_stats(
                 session_id, created=False, seconds=None, model_hint=conversation.model
             )
-        await self._refresh_keyboard(message, message_id, stats)
+        return self._keyboard_for(stats)
 
     async def context_line(self, message: Inbound) -> str:
         """One line for the chat, mirroring the status bar of the TUI."""
