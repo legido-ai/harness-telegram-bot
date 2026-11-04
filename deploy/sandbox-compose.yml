@@ -1,15 +1,22 @@
 services:
-  # Sandbox agent server: the throwaway OpenCode the bot talks to while testing,
-  # so prompts never touch a real workspace.
   agent:
     image: ${SANDBOX_AGENT_IMAGE:-opencode:current}
     container_name: otb-agent
-    entrypoint: ["opencode", "serve", "--port", "4199", "--hostname", "0.0.0.0"]
+    # Seed the same provider config production uses, then serve without the
+    # Telegram bridge that the normal entrypoint would start.
+    entrypoint:
+      - sh
+      - -c
+      - mkdir -p /root/.config/opencode && cp -n /opt/opencode/opencode.json /root/.config/opencode/opencode.json || true; exec opencode serve --port 4199 --hostname 0.0.0.0
     working_dir: /workspace
     environment:
       OPENCODE_PASSWORD: ${OPENCODE_PASSWORD:?set OPENCODE_PASSWORD}
+      OPENCODE_GO_API_KEY: ${OPENCODE_GO_API_KEY:?set OPENCODE_GO_API_KEY}
     volumes:
       - ${SANDBOX_DIR:-/tmp/opencode/otb-sandbox}:/workspace
+    networks:
+      - default
+      - box
     restart: unless-stopped
 
   bot:
@@ -41,6 +48,11 @@ services:
       timeout: 5s
       start_period: 20s
       retries: 3
+
+networks:
+  box:
+    external: true
+    name: box_default
 
 volumes:
   otb-test-data:

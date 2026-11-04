@@ -31,11 +31,18 @@ fi
 grep -q '^TELEGRAM_BOT_TOKEN=..*' "$REPO_ROOT/.env" || fail "TELEGRAM_BOT_TOKEN is empty in .env"
 grep -q '^TELEGRAM_ALLOWED_USER_IDS=..*' "$REPO_ROOT/.env" || fail "TELEGRAM_ALLOWED_USER_IDS is empty in .env"
 
+[ -n "${OPENCODE_GO_API_KEY:-}" ] || fail "OPENCODE_GO_API_KEY is not set (the sandbox agent needs a provider)"
+
 mkdir -p "$SANDBOX_DIR"
-if [ -z "$(ls -A "$SANDBOX_DIR" 2>/dev/null)" ]; then
-  printf '# Sandbox for the OpenCode Telegram bot\n\nNothing here matters: the agent is allowed to do anything.\n' \
-    > "$SANDBOX_DIR/README.md"
-fi
+
+# The agent refuses to serve if the project config path cannot be read, and the
+# mount source lives on the Docker host rather than here: seed it through a
+# container so we always write to the same filesystem Docker sees.
+docker run --rm -v "$SANDBOX_DIR:/workspace" alpine:3.22 sh -c '
+  rm -rf /workspace/opencode.json
+  printf "%s\n" "{\"\$schema\": \"https://opencode.ai/config.json\"}" > /workspace/opencode.json
+  [ -f /workspace/README.md ] || printf "# Sandbox\n\nNothing here matters.\n" > /workspace/README.md
+' >/dev/null
 
 if [ ! -s "$PASSWORD_FILE" ]; then
   mkdir -p "$(dirname "$PASSWORD_FILE")"
@@ -44,6 +51,7 @@ if [ ! -s "$PASSWORD_FILE" ]; then
 fi
 
 export OPENCODE_PASSWORD="$(cat "$PASSWORD_FILE")"
+export OPENCODE_GO_API_KEY
 export SANDBOX_DIR
 export SANDBOX_HEALTH_PORT="${SANDBOX_HEALTH_PORT:-8099}"
 

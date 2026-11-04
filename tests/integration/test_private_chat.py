@@ -146,3 +146,10 @@ async def test_fresh_session_reports_no_cost(bot_app: BotApp, messenger) -> None
     inbound = bot_app._inbound(update("/context", chat_type="private", chat_id=111, update_id=84))
     await bot_app._cmd_context(inbound, "")
     assert "$" not in messenger.sent[-1].text
+
+
+async def test_agent_error_is_shown_instead_of_silence(bot_app: BotApp, messenger, fake_server) -> None:
+    fake_server.answer_error = "Free usage limit reached. Connect a provider."
+    await send(bot_app, update("hello", chat_type="private", chat_id=111, update_id=91))
+    await wait_for(lambda: any("Free usage limit" in item.text for item in messenger.edited))
+    assert any("⚠️" in item.text for item in messenger.edited)

@@ -26,6 +26,7 @@ class FakeOpenCode:
         self.fail_prompt: int | None = None
         self.publish_on_prompt = True
         self.permission_request: tuple[str, str] | None = None
+        self.answer_error: str | None = None
         self.session_stats: dict[str, Any] = {
             "cost": 0.03,
             "tokens": {
@@ -51,6 +52,9 @@ class FakeOpenCode:
     async def _stream_answer(self, session_id: str) -> None:
         await asyncio.sleep(0)
         self.emit("session.execution.started", session_id)
+        if self.answer_error:
+            self.emit("session.execution.failed", session_id)
+            return
         if self.permission_request is not None:
             request_id, tool = self.permission_request
             self.emit("permission.asked", session_id, requestID=request_id, tool=tool)
@@ -93,6 +97,11 @@ class FakeOpenCode:
                             "id": "msg_2",
                             "type": "assistant",
                             "model": {"providerID": "go", "modelID": "flash"},
+                            **(
+                                {"error": {"type": "provider", "message": self.answer_error}}
+                                if self.answer_error
+                                else {}
+                            ),
                             "tokens": {
                                 "input": 40000,
                                 "output": 500,

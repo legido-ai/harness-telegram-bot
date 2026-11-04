@@ -181,6 +181,16 @@ class Runner:
 
         session_id = conversation.active_session_id
         created = False
+        if session_id:
+            # A recreated agent server forgets its sessions while our binding
+            # still points at them: verify before prompting, then heal silently.
+            try:
+                await self._client.session(session_id)
+            except SessionGone:
+                self._store.clear_session(message.chat_id, message.thread_id)
+                session_id = None
+            except OpenCodeError:
+                pass
         if not session_id:
             session_id, created = await self.new_session(message, message.user_id)
 
@@ -239,8 +249,14 @@ class Runner:
                 seconds=time.monotonic() - started_at,
                 model_hint=conversation.model,
             )
+            if not editor.text.strip():
+                # No text at all: either the agent failed or it produced silence.
+                failure = await self._last_error(session_id)
+                editor.append(failure or "The agent finished without producing an answer.")
+                status = "failed" if failure else status
+                error_kind = error_kind or ("agent_error" if failure else "empty_answer")
             await editor.finish(format_footer(stats))
-            await self._refresh_dashboard(message, stats)
+            await self._refresh_dashboard(message, stats, status)
         except SessionGone:
             self._store.clear_session(message.chat_id, message.thread_id)
             status, error_kind = "failed", "session_gone"
@@ -293,7 +309,17 @@ class Runner:
                         editor.append(text)
                 return
 
-    async def _refresh_dashboard(self, message: Inbound, stats: RunStats) -> None:
+    async def _last_error(self, session_id: str) -> str | None:
+        try:
+            usage = await self._client.context_usage(session_id)
+        except OpenCodeError:
+            return None
+        error = usage.get("error")
+        return f"⚠️ {error}" if isinstance(error, str) and error else None
+
+    async def _refresh_dashboard(
+        self, message: Inbound, stats: RunStats, status: str = "idle"
+    ) -> None:
         """Keep the pinned card current: one message per conversation, edited."""
 
         if self.messenger is None:
@@ -303,6 +329,7 @@ class Runner:
             stats=stats,
             queue_depth=self.queue_depth(message.key),
             last_user=message.display_name,
+            status=status,
         )
         existing = self._store.pinned_message_id(message.chat_id, message.thread_id)
         if existing:
@@ -399,6 +426,16 @@ class Runner:
             or model_ref.get("id")
             or (model_hint or {}).get("modelID")
         )
+
+        if not model_id:
+            # Sessions created without an explicit model do not record one, so
+            # ask the server which model it would use and show that.
+            try:
+                default = await self._client.default_model()
+            except OpenCodeError:
+                default = {}
+            provider = provider or default.get("providerID")
+            model_id = model_id or default.get("modelID") or default.get("id")
 
         limit = None
         try:

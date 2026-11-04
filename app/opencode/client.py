@@ -243,17 +243,31 @@ class OpenCodeClient:
             cache = tokens.get("cache") if isinstance(tokens.get("cache"), dict) else {}
             used = int(tokens.get("input") or 0) + int(cache.get("read") or 0)
             model = message.get("model") if isinstance(message.get("model"), dict) else {}
+            error = message.get("error")
             return {
                 "used_tokens": used or None,
                 "provider": model.get("providerID"),
                 "model": model.get("modelID") or model.get("id"),
+                "error": _error_text(error),
             }
-        return {"used_tokens": None, "provider": None, "model": None}
+        return {"used_tokens": None, "provider": None, "model": None, "error": None}
 
     async def context_limit(self, provider_id: str | None, model_id: str | None) -> int | None:
         if not provider_id or not model_id:
             return None
         return (await self.context_limits()).get(f"{provider_id}/{model_id}")
+
+
+def _error_text(error: object) -> str | None:
+    """Pull a human sentence out of a structured assistant error."""
+
+    if not isinstance(error, dict):
+        return None
+    message = error.get("message")
+    if isinstance(message, str) and message.strip():
+        return message.strip()
+    kind = error.get("type")
+    return str(kind) if kind else None
 
 
 def basic_auth_header(username: str, password: str) -> str:
