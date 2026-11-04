@@ -98,6 +98,10 @@ class BotApp:
 
         # The persistent keyboard sends plain labels; treat them as commands.
         if (menu_command := keyboards.menu_command(message.text)) is not None:
+            log.info(
+                "keyboard button pressed",
+                extra={"event": menu_command, "chat_id": message.chat_id},
+            )
             await self._handle_command(message, menu_command)
             return
 

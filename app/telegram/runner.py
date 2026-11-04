@@ -222,6 +222,12 @@ class Runner:
         stats: RunStats | None = None
         started_at = time.monotonic()
 
+        # Set the indicator before the request goes out: waiting for the loop
+        # to be scheduled lets a fast model answer first, and then nothing is
+        # ever visible.
+        if self.messenger is not None:
+            await self.messenger.send_typing(message.chat_id, message.thread_id)
+
         typing_stop = asyncio.Event()
         typing_task = asyncio.create_task(
             self._typing_loop(message, editor, typing_stop), name=f"typing:{key}"
