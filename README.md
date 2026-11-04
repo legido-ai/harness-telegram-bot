@@ -119,6 +119,22 @@ make lint
 make test-unit
 ```
 
+### Sandbox test rig
+
+`deploy/sandbox-up.sh` starts a throwaway agent server plus the bot pointed at
+it, so live testing never touches a real workspace:
+
+```bash
+deploy/sandbox-up.sh            # build the image and start both containers
+deploy/sandbox-up.sh --no-build # reuse the last image
+```
+
+It fails fast when the Docker runtime cannot start containers, waits for
+`/healthz` to report `ok`, and prints the health payload. The agent workspace is
+`/tmp/opencode/otb-sandbox`, the server password lives at
+`/tmp/opencode/otb-password` (mode 600), and state is the `otb-test-data`
+volume. `deploy/sandbox-compose.yml` is the compose file it uses.
+
 Layout:
 
 ```text
