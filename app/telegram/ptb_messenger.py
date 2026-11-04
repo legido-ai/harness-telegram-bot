@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from telegram import Bot, ReplyParameters
+from telegram.constants import ChatAction
 from telegram.error import BadRequest
 
 from app.telegram.render import render_markdown, strip_html
@@ -80,6 +81,16 @@ class TelegramMessenger:
 
     async def answer_callback(self, callback_id: str, text: str | None = None) -> None:
         await self._bot.answer_callback_query(callback_query_id=callback_id, text=text or "")
+
+    async def send_typing(self, chat_id: int, thread_id: int = 0) -> None:
+        try:
+            await self._bot.send_chat_action(
+                chat_id=chat_id,
+                action=ChatAction.TYPING,
+                message_thread_id=thread_id or None,
+            )
+        except Exception as exc:  # a typing indicator must never break a run
+            log.debug("typing action failed: %s", type(exc).__name__)
 
     async def pin(self, chat_id: int, message_id: int) -> None:
         try:

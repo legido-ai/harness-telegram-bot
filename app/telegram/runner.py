@@ -222,6 +222,11 @@ class Runner:
         stats: RunStats | None = None
         started_at = time.monotonic()
 
+        typing_stop = asyncio.Event()
+        typing_task = asyncio.create_task(
+            self._typing_loop(message, editor, typing_stop), name=f"typing:{key}"
+        )
+
         try:
             await editor.start()
             events = self._bus.subscribe(session_id)
@@ -274,6 +279,8 @@ class Runner:
             status, error_kind = "failed", "open_code_error"
             await editor.finish("The agent server rejected that request.")
         finally:
+            typing_stop.set()
+            typing_task.cancel()
             if turn_id:
                 self._store.finish_turn(
                     turn_id,
@@ -283,6 +290,21 @@ class Runner:
                     tokens=stats.used_tokens if stats else None,
                 )
             self._active_session.pop(key, None)
+
+    async def _typing_loop(
+        self, message: Inbound, editor: StreamEditor, stop: asyncio.Event
+    ) -> None:
+        """Show 'typing…' while the agent thinks, until the first text lands."""
+
+        while not stop.is_set():
+            if editor.message_ids:
+                return
+            if self.messenger is not None:
+                await self.messenger.send_typing(message.chat_id, message.thread_id)
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=4.0)
+            except TimeoutError:
+                continue
 
     async def _consume(
         self, events: asyncio.Queue[Event], editor: StreamEditor, state: RunState

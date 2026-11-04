@@ -104,30 +104,25 @@ class StreamEditor:
         return self._now() - self._last_edit >= self._interval
 
     async def start(self) -> None:
-        if self._started:
-            return
+        """Mark the answer as open.
+
+        Nothing is sent yet: while the agent is thinking the chat shows the
+        typing indicator, not an empty bubble. The first flush creates the
+        message.
+        """
+
         self._started = True
-        text = self._compose(0) or "…"
-        message_id = await self._send(
-            self._chat_id,
-            text,
-            thread_id=self._thread_id,
-            reply_to=self._reply_to,
-            markdown=self._markdown,
-        )
-        self._message_ids.append(message_id)
-        self._sent.append(text)
         self._last_edit = self._now()
 
     async def flush(self, *, force: bool = False) -> None:
-        if not self._started:
-            await self.start()
-            if not force:
-                return
-        if not force and not self._due():
+        # The very first send is never gated: until something is on screen there
+        # is nothing to coalesce.
+        if not force and self._message_ids and not self._due():
+            return
+        if not self._buffer.strip() and not self._message_ids:
             return
 
-        chunks = split_message(self._buffer) or ["…"]
+        chunks = split_message(self._buffer) or [""]
         for index, chunk in enumerate(chunks):
             rendered = f"{self._prefix}\n{chunk}" if index == 0 and self._prefix else chunk
             if index < len(self._message_ids):
@@ -150,6 +145,8 @@ class StreamEditor:
         self._last_edit = self._now()
 
     async def finish(self, footer: str = "") -> None:
+        if not self._message_ids and not self._buffer.strip():
+            self._buffer = "…"
         if footer:
             self._buffer = f"{self._buffer.rstrip()}\n\n{footer}" if self._buffer.strip() else footer
         await self.flush(force=True)

@@ -151,5 +151,14 @@ async def test_fresh_session_reports_no_cost(bot_app: BotApp, messenger) -> None
 async def test_agent_error_is_shown_instead_of_silence(bot_app: BotApp, messenger, fake_server) -> None:
     fake_server.answer_error = "Free usage limit reached. Connect a provider."
     await send(bot_app, update("hello", chat_type="private", chat_id=111, update_id=91))
-    await wait_for(lambda: any("Free usage limit" in item.text for item in messenger.edited))
-    assert any("⚠️" in item.text for item in messenger.edited)
+    await wait_for(
+        lambda: any("Free usage limit" in item.text for item in messenger.sent + messenger.edited)
+    )
+    assert any("⚠️" in item.text for item in messenger.sent + messenger.edited)
+
+
+async def test_typing_indicator_replaces_the_placeholder(bot_app: BotApp, messenger) -> None:
+    await send(bot_app, update("slow question", chat_type="private", chat_id=111, update_id=101))
+    await wait_for(lambda: bool(messenger.typing))
+    assert messenger.typing[0][0] == 111
+    assert all("…" not in item.text for item in messenger.sent)

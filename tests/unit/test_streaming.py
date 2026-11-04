@@ -31,10 +31,11 @@ async def test_editor_coalesces_edits() -> None:
         messenger.send_text, messenger.edit_text, chat_id=1, min_interval=1.0, now=now
     )
     await editor.start()
-    assert len(messenger.sent) == 1
+    assert messenger.sent == []  # nothing is sent while the agent thinks
 
     editor.append("hello")
     await editor.flush()
+    assert len(messenger.sent) == 1
     clock["now"] += 0.1
     editor.append(" world")
     await editor.flush()
