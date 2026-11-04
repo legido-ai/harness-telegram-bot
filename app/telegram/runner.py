@@ -306,17 +306,25 @@ class Runner:
         except OpenCodeError:
             log.debug("session info unavailable for footer")
 
-        tokens = info.get("tokens") if isinstance(info.get("tokens"), dict) else {}
-        cache = tokens.get("cache") if isinstance(tokens.get("cache"), dict) else {}
-        used = None
-        if tokens:
-            total = int(tokens.get("input") or 0) + int(cache.get("read") or 0)
-            used = total or None
+        usage: dict[str, object] = {}
+        try:
+            usage = await self._client.context_usage(session_id)
+        except OpenCodeError:
+            log.debug("context usage unavailable for footer")
+
+        used = usage.get("used_tokens") if isinstance(usage.get("used_tokens"), int) else None
 
         model_ref = info.get("model") if isinstance(info.get("model"), dict) else {}
-        provider = model_ref.get("providerID") or (model_hint or {}).get("providerID")
+        provider = (
+            usage.get("provider")
+            or model_ref.get("providerID")
+            or (model_hint or {}).get("providerID")
+        )
         model_id = (
-            model_ref.get("modelID") or model_ref.get("id") or (model_hint or {}).get("modelID")
+            usage.get("model")
+            or model_ref.get("modelID")
+            or model_ref.get("id")
+            or (model_hint or {}).get("modelID")
         )
 
         limit = None

@@ -29,7 +29,7 @@ class FakeOpenCode:
         self.session_stats: dict[str, Any] = {
             "cost": 0.03,
             "tokens": {
-                "input": 40000,
+                "input": 1100000,
                 "output": 500,
                 "reasoning": 0,
                 "cache": {"read": 2000, "write": 0},
@@ -78,6 +78,28 @@ class FakeOpenCode:
 
         if path == "/api/session" and method == "GET":
             return httpx.Response(200, json={"data": list(self.sessions.values())})
+
+        if path.endswith("/context") and method == "GET":
+            session_id = path.split("/")[3]
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {"id": "msg_1", "type": "user"},
+                        {
+                            "id": "msg_2",
+                            "type": "assistant",
+                            "model": {"providerID": "go", "modelID": "flash"},
+                            "tokens": {
+                                "input": 40000,
+                                "output": 500,
+                                "reasoning": 0,
+                                "cache": {"read": 2000, "write": 0},
+                            },
+                        },
+                    ]
+                },
+            )
 
         if method == "GET" and path.startswith("/api/session/"):
             session_id = path.split("/")[3]

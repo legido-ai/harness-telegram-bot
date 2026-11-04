@@ -216,6 +216,34 @@ class OpenCodeClient:
             self._limits = limits
         return self._limits
 
+    async def context_usage(self, session_id: str) -> dict[str, Any]:
+        """Return the prompt size of the last finished assistant message.
+
+        ``Session.Info.tokens`` is cumulative over the whole session (megatokens
+        after a long day) and cannot be compared with a context window. The last
+        assistant message's own ``tokens`` is the actual occupancy:
+        ``input + cache.read``.
+        """
+
+        messages = await self._json("GET", f"/api/session/{session_id}/context")
+        if isinstance(messages, dict):
+            messages = messages.get("data") or messages.get("messages") or []
+        for message in reversed(list(messages or [])):
+            if not isinstance(message, dict) or message.get("type") != "assistant":
+                continue
+            tokens = message.get("tokens")
+            if not isinstance(tokens, dict):
+                continue
+            cache = tokens.get("cache") if isinstance(tokens.get("cache"), dict) else {}
+            used = int(tokens.get("input") or 0) + int(cache.get("read") or 0)
+            model = message.get("model") if isinstance(message.get("model"), dict) else {}
+            return {
+                "used_tokens": used or None,
+                "provider": model.get("providerID"),
+                "model": model.get("modelID") or model.get("id"),
+            }
+        return {"used_tokens": None, "provider": None, "model": None}
+
     async def context_limit(self, provider_id: str | None, model_id: str | None) -> int | None:
         if not provider_id or not model_id:
             return None
