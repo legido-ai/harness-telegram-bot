@@ -78,6 +78,12 @@ async def test_duplicate_update_runs_once(bot_app: BotApp, fake_server) -> None:
     assert len(fake_server.prompts) == 1
 
 
+async def test_answer_signs_off_when_done(bot_app: BotApp, messenger) -> None:
+    await send(bot_app, update("sign off", chat_type="private", chat_id=111, update_id=121))
+    await wait_for(lambda: any("I'm done" in item.text for item in messenger.edited))
+    assert "✅ I'm done" in messenger.edited[-1].text
+
+
 async def test_answer_carries_the_consumption_footer(bot_app: BotApp, messenger) -> None:
     await send(bot_app, update("how are you", chat_type="private", chat_id=111, update_id=41))
     await wait_for(lambda: any("(21%)" in item.text for item in messenger.edited))

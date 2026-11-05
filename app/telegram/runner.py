@@ -268,7 +268,9 @@ class Runner:
                 editor.append(failure or "The agent finished without producing an answer.")
                 status = "failed" if failure else status
                 error_kind = error_kind or ("agent_error" if failure else "empty_answer")
-            await editor.finish(format_footer(stats))
+            done_line = "✅ I'm done"
+            footer = format_footer(stats)
+            await editor.finish(f"{done_line}\n{footer}" if footer else done_line)
             await self._refresh_dashboard(message, stats, status)
         except SessionGone:
             self._store.clear_session(message.chat_id, message.thread_id)
