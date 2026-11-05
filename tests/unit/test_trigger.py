@@ -118,3 +118,24 @@ def test_private_command_for_another_bot_is_ignored() -> None:
     entity = Entity(type="bot_command", offset=0, length=len(text))
     message = inbound(chat_type="private", chat_id=111, text=text, entities=(entity,))
     assert detect(message, bot_id=BOT_ID, bot_username=BOT_USERNAME) is None
+
+
+def test_bare_command_is_accepted_in_groups_when_it_is_ours() -> None:
+    from app.telegram.types import Entity
+
+    text = "/new"
+    entity = Entity(type="bot_command", offset=0, length=len(text))
+    message = inbound(text=text, entities=(entity,))
+    trigger = detect(message, bot_id=BOT_ID, bot_username=BOT_USERNAME)
+    assert trigger is not None
+    assert trigger.kind == "command"
+    assert trigger.text == "/new"
+
+
+def test_bare_command_of_another_bot_is_ignored() -> None:
+    from app.telegram.types import Entity
+
+    text = "/deploy"
+    entity = Entity(type="bot_command", offset=0, length=len(text))
+    message = inbound(text=text, entities=(entity,))
+    assert detect(message, bot_id=BOT_ID, bot_username=BOT_USERNAME) is None

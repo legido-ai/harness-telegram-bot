@@ -10,6 +10,25 @@ from app.telegram.types import Entity, Inbound, Quoted, Trigger
 
 DEFAULT_TRIGGER_POLICY = "mention"
 
+# Commands this bot owns. In a group a bare /new is accepted for these, because
+# privacy is off and the alternative is typing /new@bot every time.
+OWN_COMMANDS = frozenset(
+    {
+        "start",
+        "help",
+        "id",
+        "new",
+        "sessions",
+        "switch",
+        "abort",
+        "status",
+        "context",
+        "model",
+        "agent",
+        "trigger",
+    }
+)
+
 
 def _u16_map(text: str) -> list[int]:
     """Map each UTF-16 code unit index to a Python character index."""
@@ -72,7 +91,7 @@ def _command_targets_bot(
             if target.lower() == bot_username.lstrip("@").lower():
                 return True, command
             continue
-        if is_private:
+        if is_private or command in OWN_COMMANDS:
             return True, command
     return False, None
 
