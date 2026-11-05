@@ -52,13 +52,18 @@ compliance and checklist requirements.
 
 ### IV. Secret Hygiene
 
-- The Telegram bot token, the OpenCode server password, and any provider key
-  come from the environment at runtime only; none are committed, logged,
-  embedded in images, echoed in errors, or included in test fixtures.
+- The Telegram bot token, the OpenCode server password, and any provider key are
+  supplied by the operator at runtime through the process environment. They are
+  never committed, logged, embedded in images, echoed in errors, or included in
+  test fixtures.
+- The application MUST NOT read a secret store, call a cloud secret API, or
+  require a cloud identity to start. Its only secret input is the environment it
+  is given.
+- How the operator supplies those values is a deployment concern outside this
+  project's scope; this repository MUST NOT assume, encode or document one
+  mechanism.
 - A committed `.env.example` documents every supported variable with
   placeholder values; the real `.env` is git-ignored and never committed.
-- In production the values come from OCI Vault through `oci-env`; the bot MUST
-  NOT read a secret store of its own.
 - Startup MUST validate required configuration and fail fast with a clear,
   secret-free message.
 - Logs, exception traces, and health payloads MUST redact the bot token, the
@@ -164,4 +169,4 @@ justification.
   compliance with this constitution and record the verification in the plan's
   Constitution Check section.
 
-**Version**: 1.0.0 | **Ratified**: 2026-11-03 | **Last Amended**: 2026-11-03
+**Version**: 2.0.0 | **Ratified**: 2026-11-03 | **Last Amended**: 2026-11-03

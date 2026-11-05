@@ -1,0 +1,59 @@
+services:
+  agent:
+    image: ${SANDBOX_AGENT_IMAGE:-opencode:current}
+    container_name: otb-agent
+    # Seed the same provider config production uses, then serve without the
+    # Telegram bridge that the normal entrypoint would start.
+    entrypoint:
+      - sh
+      - -c
+      - mkdir -p /root/.config/opencode && cp -n /opt/opencode/opencode.json /root/.config/opencode/opencode.json || true; exec opencode serve --port 4199 --hostname 0.0.0.0
+    working_dir: /workspace
+    environment:
+      OPENCODE_PASSWORD: ${OPENCODE_PASSWORD:?set OPENCODE_PASSWORD}
+      OPENCODE_GO_API_KEY: ${OPENCODE_GO_API_KEY:?set OPENCODE_GO_API_KEY}
+    volumes:
+      - ${SANDBOX_DIR:-/tmp/opencode/otb-sandbox}:/workspace
+    networks:
+      - default
+      - box
+    restart: unless-stopped
+
+  bot:
+    build: ..
+    image: opencode-telegram-bot:dev
+    container_name: otb-bot
+    env_file:
+      - ../.env
+    environment:
+      OPENCODE_API_URL: http://agent:4199
+      OPENCODE_SERVER_PASSWORD: ${OPENCODE_PASSWORD:?set OPENCODE_PASSWORD}
+      DATA_DIR: /data
+      HEALTH_HOST: 0.0.0.0
+      HEALTH_PORT: "8080"
+    volumes:
+      - otb-test-data:/data
+    ports:
+      - "127.0.0.1:${SANDBOX_HEALTH_PORT:-8099}:8080"
+    depends_on:
+      - agent
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=4).status == 200 else 1)"
+      interval: 20s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+networks:
+  box:
+    external: true
+    name: box_default
+
+volumes:
+  otb-test-data:
+    name: otb-test-data
