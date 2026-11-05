@@ -84,7 +84,8 @@ async def test_answer_signs_off_when_done(bot_app: BotApp, messenger) -> None:
     signoff = next(item for item in messenger.sent if "I'm done" in item.text)
     assert signoff.text.startswith("✅ I'm done · flash")
     labels = [b.text for row in signoff.keyboard.keyboard for b in row]
-    assert labels == ["🧠 Model", "📊 42K / 200K (21%)"]
+    assert labels[0] == "🧠 go/flash"
+    assert labels[1] == "📊 42K / 200K (21%)"
 
 
 async def test_answer_carries_the_consumption_footer(bot_app: BotApp, messenger) -> None:

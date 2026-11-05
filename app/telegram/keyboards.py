@@ -30,13 +30,14 @@ def context_label(used: int | None, limit: int | None) -> str:
     return CONTEXT_EMPTY
 
 
-def main_menu(context: str | None = None) -> Any:
-    """One row, two blocks: model picker and live context usage."""
+def main_menu(context: str | None = None, model: str | None = None) -> Any:
+    """One row, two blocks: current model and live context usage."""
 
     from telegram import KeyboardButton, ReplyKeyboardMarkup
 
+    label = f"🧠 {model}"[:40] if model else MODEL_LABEL
     return ReplyKeyboardMarkup(
-        [[KeyboardButton(MODEL_LABEL), KeyboardButton(context or CONTEXT_EMPTY)]],
+        [[KeyboardButton(label), KeyboardButton(context or CONTEXT_EMPTY)]],
         resize_keyboard=True,
         is_persistent=True,
     )

@@ -359,13 +359,15 @@ class Runner:
         if self.messenger is None:
             return
         footer = format_footer(stats).lstrip("— ").strip()
-        label = context_label(stats.used_tokens, stats.limit_tokens)
         text = f"✅ I'm done · {footer}" if footer else "✅ I'm done"
+        model = (
+            f"{stats.provider}/{stats.model}" if stats.provider and stats.model else None
+        )
         await self.messenger.send_text(
             message.chat_id,
             text,
             thread_id=message.thread_id,
-            keyboard=main_menu(label),
+            keyboard=self._keyboard_for(stats, model),
         )
 
     async def _refresh_dashboard(
@@ -400,13 +402,21 @@ class Runner:
         return message_id
 
     @staticmethod
-    def _keyboard_for(stats: RunStats | None) -> Any:
+    def _keyboard_for(stats: RunStats | None, model: str | None = None) -> Any:
         return main_menu(
             context_label(
                 stats.used_tokens if stats else None,
                 stats.limit_tokens if stats else None,
-            )
+            ),
+            model,
         )
+
+    def _model_label(self, message: Inbound) -> str | None:
+        conversation = self._store.get_conversation(message.chat_id, message.thread_id)
+        model = conversation.model if conversation else None
+        if model:
+            return f"{model['providerID']}/{model['modelID']}"
+        return None
 
     async def refresh_dashboard(self, message: Inbound) -> None:
         """Redraw the pinned card for the current binding (after /new, /switch)."""
@@ -430,7 +440,7 @@ class Runner:
             stats = await self._run_stats(
                 session_id, created=False, seconds=None, model_hint=conversation.model
             )
-        return self._keyboard_for(stats)
+        return self._keyboard_for(stats, self._model_label(message))
 
     async def context_line(self, message: Inbound) -> str:
         """One line for the chat, mirroring the status bar of the TUI."""

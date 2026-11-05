@@ -52,7 +52,9 @@ async def test_model_choice_is_stored_and_applied(bot_app: BotApp, fake_server, 
 
     assert fake_server.model_calls[0] == (session_id, "go", "flash")
     assert store.get_conversation(-100123, 0).model == {"providerID": "go", "modelID": "flash"}
-    assert any("Model set to go/flash" in item.text for item in messenger.edited)
+    assert any("Model set to go/flash" in item.text for item in messenger.sent)
+    latest = [item for item in messenger.sent if item.keyboard is not None][-1]
+    assert latest.keyboard.keyboard[0][0].text == "🧠 go/flash"
 
 
 async def test_agent_choice_is_stored(bot_app: BotApp, fake_server, store, messenger) -> None:

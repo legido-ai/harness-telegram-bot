@@ -466,12 +466,19 @@ class BotApp:
             if self.messenger:
                 await self.messenger.answer_callback(message.callback_id or "", exc.user_message)
             return
-        self.store.set_model(message.chat_id, message.thread_id, {"providerID": provider, "modelID": model_id})
+        self.store.set_model(
+            message.chat_id, message.thread_id, {"providerID": provider, "modelID": model_id}
+        )
         if self.messenger:
             await self.messenger.answer_callback(message.callback_id or "", "Model updated.")
-            await self.messenger.edit_text(
-                message.chat_id, message.message_id, f"Model set to {provider}/{model_id}."
+            # A fresh message is the only way to relabel the reply keyboard.
+            await self.messenger.send_text(
+                message.chat_id,
+                f"Model set to {provider}/{model_id}.",
+                thread_id=message.thread_id,
+                keyboard=await self.runner.keyboard(message),
             )
+            await self.messenger.delete_message(message.chat_id, message.message_id)
 
     async def _callback_agent(self, message: Inbound, parts: list[str]) -> None:
         if not parts:
