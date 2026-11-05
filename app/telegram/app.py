@@ -49,6 +49,9 @@ class BotApp:
         self.runner = runner
         self.state = state
         self.authorizer = Authorizer(settings, store)
+        # Telegram caps callback_data at 64 bytes; a short token keeps menus
+        # usable without embedding session ids and model names in every button.
+        self._choices: dict[str, tuple[str, str, str, str]] = {}
         self.messenger: Messenger | None = messenger
         self.bot_id = 0
         self.bot_username = ""
@@ -235,6 +238,13 @@ class BotApp:
     async def _cmd_switch(self, message: Inbound, argument: str) -> None:
         await self._cmd_sessions(message, argument)
 
+    def _token(self, kind: str, session_id: str, a: str, b: str = "") -> str:
+        if len(self._choices) > 400:
+            self._choices.clear()
+        token = f"c{len(self._choices)}"
+        self._choices[token] = (kind, session_id, a, b)
+        return token
+
     async def _cmd_model(self, message: Inbound, argument: str) -> None:
         session_id, _ = await self.runner.ensure_session(message)
         try:
@@ -247,12 +257,13 @@ class BotApp:
             provider = str(item.get("providerID") or item.get("provider") or "?")
             model_id = str(item.get("modelID") or item.get("id") or "?")
             label = str(item.get("name") or model_id)
-            entries.append((provider, model_id, label))
+            token = self._token("m", session_id, provider, model_id)
+            entries.append((token, label))
         if not entries:
             await self._reply(message, "The server reported no models.")
             return
         await self._reply(
-            message, "Pick a model for this conversation:", keyboards.model_keyboard(session_id, entries)
+            message, "Pick a model for this conversation:", keyboards.model_keyboard(entries)
         )
 
     async def _cmd_agent(self, message: Inbound, argument: str) -> None:
@@ -266,8 +277,9 @@ class BotApp:
         if not names:
             await self._reply(message, "The server reported no agents.")
             return
+        entries = [(self._token("a", session_id, name), name) for name in names]
         await self._reply(
-            message, "Pick an agent mode for this conversation:", keyboards.agent_keyboard(session_id, names)
+            message, "Pick an agent mode for this conversation:", keyboards.agent_keyboard(entries)
         )
 
     # -- callbacks -------------------------------------------------------
@@ -359,9 +371,19 @@ class BotApp:
             )
 
     async def _callback_model(self, message: Inbound, parts: list[str]) -> None:
-        if len(parts) < 3:
+        if not parts:
             return
-        session_id, provider, model_id = parts[0], parts[1], parts[2]
+        if parts[0].startswith("c"):
+            choice = self._choices.get(parts[0])
+            if choice is None:
+                if self.messenger:
+                    await self.messenger.answer_callback(message.callback_id or "", "This control has expired.")
+                return
+            _, session_id, provider, model_id = choice
+        elif len(parts) >= 3:
+            session_id, provider, model_id = parts[0], parts[1], parts[2]
+        else:
+            return
         try:
             await self.client.set_model(session_id, provider, model_id)
         except OpenCodeError as exc:
@@ -376,9 +398,19 @@ class BotApp:
             )
 
     async def _callback_agent(self, message: Inbound, parts: list[str]) -> None:
-        if len(parts) < 2:
+        if not parts:
             return
-        session_id, agent = parts[0], parts[1]
+        if parts[0].startswith("c"):
+            choice = self._choices.get(parts[0])
+            if choice is None:
+                if self.messenger:
+                    await self.messenger.answer_callback(message.callback_id or "", "This control has expired.")
+                return
+            _, session_id, agent, _ = choice
+        elif len(parts) >= 2:
+            session_id, agent = parts[0], parts[1]
+        else:
+            return
         try:
             await self.client.set_agent(session_id, agent)
         except OpenCodeError as exc:

@@ -41,7 +41,13 @@ async def test_model_choice_is_stored_and_applied(bot_app: BotApp, fake_server, 
     await wait_for(lambda: len(fake_server.prompts) == 1)
     session_id = store.get_conversation(-100123, 0).active_session_id
 
-    await bot_app.on_callback(callback_update(f"m:{session_id}:go:flash", update_id=80), SimpleNamespace(bot=None))
+    await bot_app._cmd_model(bot_app._inbound(update("/model", update_id=79)), "")
+    menu = next(
+        item for item in messenger.sent if hasattr(item.keyboard, "inline_keyboard")
+    )
+    button = menu.keyboard.inline_keyboard[0][0]
+    token = button.callback_data.split(":")[1]
+    await bot_app.on_callback(callback_update(f"m:{token}", update_id=80), SimpleNamespace(bot=None))
     await wait_for(lambda: len(fake_server.model_calls) == 1)
 
     assert fake_server.model_calls[0] == (session_id, "go", "flash")
@@ -52,8 +58,14 @@ async def test_model_choice_is_stored_and_applied(bot_app: BotApp, fake_server, 
 async def test_agent_choice_is_stored(bot_app: BotApp, fake_server, store, messenger) -> None:
     await send(bot_app, update("@oc3bot hello", entities=MENTION, update_id=1))
     await wait_for(lambda: len(fake_server.prompts) == 1)
-    session_id = store.get_conversation(-100123, 0).active_session_id
-
-    await bot_app.on_callback(callback_update(f"a:{session_id}:plan", update_id=81), SimpleNamespace(bot=None))
+    await bot_app._cmd_agent(bot_app._inbound(update("/agent", update_id=80)), "")
+    menu = next(
+        item for item in messenger.sent if hasattr(item.keyboard, "inline_keyboard")
+    )
+    button = next(
+        b for row in menu.keyboard.inline_keyboard for b in row if b.text == "plan"
+    )
+    token = button.callback_data.split(":")[1]
+    await bot_app.on_callback(callback_update(f"a:{token}", update_id=81), SimpleNamespace(bot=None))
     await wait_for(lambda: len(fake_server.agent_calls) == 1)
     assert store.get_conversation(-100123, 0).agent == "plan"

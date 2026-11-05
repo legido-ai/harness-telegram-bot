@@ -73,18 +73,14 @@ def form_keyboard(session_id: str, form_id: str, options: list[str]) -> Any:
     return _markup(rows)
 
 
-def model_keyboard(session_id: str, models: list[tuple[str, str, str]]) -> Any:
-    """``models`` items are (provider, model_id, label)."""
+def model_keyboard(models: list[tuple[str, str]]) -> Any:
+    """``models`` items are (token, label); tokens keep callback data short."""
 
-    rows = [
-        [(label[:40], f"m:{session_id}:{provider}:{model_id}")]
-        for provider, model_id, label in models[:10]
-    ]
-    return _markup(rows)
+    return _markup([[(label[:40], f"m:{token}")] for token, label in models[:10]])
 
 
-def agent_keyboard(session_id: str, agents: list[str]) -> Any:
-    return _markup([[(name[:40], f"a:{session_id}:{name}")] for name in agents[:10]])
+def agent_keyboard(agents: list[tuple[str, str]]) -> Any:
+    return _markup([[(label[:40], f"a:{token}")] for token, label in agents[:10]])
 
 
 def sessions_keyboard(chat_id: int, thread_id: int, sessions: list[tuple[str, str]]) -> Any:
