@@ -78,6 +78,25 @@ Full setup, including the group walkthrough: `specs/001-telegram-group-bot/quick
 Useful commands: `/new`, `/sessions`, `/abort`, `/status`, `/model`, `/agent`,
 `/trigger`, `/id`, `/help`.
 
+## Running it in a group
+
+1. Add the bot and **turn Group Privacy off** for it. With privacy on, Telegram
+   delivers commands and replies but drops plain `@mentions` — verified in a real
+   group, not theory. Admin rights are *not* required; they only buy pinning.
+2. Each human sends `/id` once, so participants are registered and answers get
+   attributed.
+3. Talk to it either way:
+
+```
+@your_bot summarise what we just decided
+/new            reset the context (bare commands work in groups)
+/status         session, model, agent, queue
+/model          pick provider, then model
+```
+
+Every answer is one message: the reply plus `✅ I'm done` on the last line. The
+pinned card carries model, context usage, cost and queue depth; the keyboard
+carries the current model and `used/limit (percent)`.
 ## Security model
 
 - **Allowlist only.** Unknown users and chats are ignored without side effects;

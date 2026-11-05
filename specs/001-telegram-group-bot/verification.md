@@ -72,3 +72,24 @@ probe: no OpenCode server was reachable.
 - Group privacy-mode behaviour with a real group: rules are enforced bot-side, so
   the platform mode cannot change the outcome, but a live check is still worth
   doing when OC3 exists.
+
+## Live validation — 2026-11-05
+
+Fresh Telegram bot (`@legido_opencode2_bot`), group "Test" with two allowlisted
+humans, agent = OpenCode V2 in a container, bot in Docker (uid 10001).
+
+| Scenario | Result | Evidence |
+|---|---|---|
+| `@bot what is the capital of France?` | answered "Paris." | update `entities=mention` delivered, one message + done line |
+| `/id@bot` and bare `/new`, `/status` | answered | `entities=bot_command` delivered |
+| reply to an answer | answered in the same session | `event: message`, session unchanged |
+| provider → model menu | `Model set to opencode/mimo-v2.6-flash-free` | `POST /model` 204 with `Model.Ref` |
+| context counter | `6K/1.0M (1%)` on card and button | `Session.Info` + `limit.context` |
+| `✅ I'm done` | same message as the answer | no second bubble |
+| agent failure | `⚠️ <reason>` instead of silence | free-tier limit reproduced, then fixed |
+
+Group Privacy had to be turned off: with it on, mentions were dropped by
+Telegram while commands and replies arrived (100 % reproducible, four attempts).
+
+Not verified: production deployment on OC3 (instance does not exist yet) and
+voice/attachments beyond the fake-server tests.

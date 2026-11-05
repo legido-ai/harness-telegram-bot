@@ -160,3 +160,14 @@ Single project at repository root: `app/`, `tests/`, `deploy/`.
   container, on the assumption that the OpenCode server shares that filesystem
   (the OC2 layout). A remote agent server with a different path namespace is a
   follow-up model decision, tracked in the roadmap.
+
+## Validated 2026-11-05
+
+Live validation in a real group superseded several assumptions and produced
+follow-up work that is now part of the implementation:
+
+- `Model.Ref` payloads for session create and model switch (T040, T042).
+- Short callback tokens instead of embedded ids (contract T5, 64-byte limit).
+- One message per answer, done line folded into the answer (T025, T034).
+- Bare commands accepted in groups once privacy is off (T029, T033).
+- Health tied to the live updater rather than startup (T051).

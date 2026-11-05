@@ -3,6 +3,53 @@
 All notable changes to this project are documented here. Format follows
 Keep a Changelog; versions use semantic versioning.
 
+## [0.1.1] — 2026-11-05
+
+Validated end to end in a real Telegram group (two allowlisted humans + bot,
+agent running against a sandbox OpenCode V2 server).
+
+### Added
+
+- Group onboarding for plain `@bot …` mentions, plus bare commands in groups
+  (`/new`, `/status`, `/model`, …), while another bot's commands stay ignored.
+- Typing indicator while the agent works; the answer appears only when the first
+  token lands, so no empty bubble is left behind.
+- Provider-first model menu: pick `OpenCode`, `OpenCode Go (Headroom)` or
+  `OpenCode Go (direct)`, then the model, labelled `provider/model`.
+- Context counter that matches the TUI: `used/limit (percent)` on the keyboard
+  button and on the pinned card, with `0/1.0M (0%)` before the first turn.
+
+### Changed
+
+- **One message per answer.** The `✅ I'm done` line is appended to the answer
+  text instead of being a second bubble; the separate bubble only existed to
+  carry the keyboard and created the reply context clients attached to it.
+- The pinned card is a single editable message; a recreated card deletes the old
+  one instead of accumulating duplicates.
+- Running as a plain group member is supported: pinning is optional and a pinned
+  card is not required for anything else.
+
+### Fixed
+
+- `POST /api/session/{id}/model` and session creation now send `Model.Ref`
+  (`{"model": {"providerID", "id"}}`); the previous flat payload made every model
+  button report "agent server unreachable" and broke `/new` once a model was set.
+- Callback data is a short token instead of embedding session id, provider and
+  model, which exceeded Telegram's 64-byte limit (`Button_data_invalid`).
+- Health reflects the live updater; a poller killed by a 409 Conflict used to
+  report `ok` while receiving nothing.
+- Agent failures surface as `⚠️ <reason>` instead of an empty answer, and a stale
+  session binding is healed instead of failing the turn.
+
+### Known limits
+
+- Plain `@mention` delivery requires **Group Privacy off** for this bot; with it
+  on, Telegram delivered commands and replies but silently dropped mentions.
+- The keyboard label refreshes on commands (`/new`, `📊 Context`, model
+  selection), not after every run: a reply keyboard can only travel on a message,
+  and we chose one message per answer.
+- Model menus list the first 20 models of a provider; `OpenCode Go` has 31.
+
 ## [0.1.0] — 2026-11-03
 
 First release: the bot runs against an OpenCode V2 server and serves one or more
