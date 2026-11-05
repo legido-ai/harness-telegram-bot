@@ -144,7 +144,10 @@ class BotApp:
             extra={
                 "update_id": message.update_id,
                 "chat_id": message.chat_id,
-                "session_id": f"{message.chat_type}/text={len(message.text)}/entities={len(message.entities)}",
+                "session_id": (
+                    f"{message.chat_type}/text={len(message.text)}/entities="
+                    + (",".join(entity.type for entity in message.entities) or "none")
+                ),
             },
         )
         if not self.authorizer.allow(message):
@@ -175,6 +178,17 @@ class BotApp:
             bot_username=self.bot_username,
             policy=policy,
         )
+        # Quoting the status card is not a request: it is the bot's own bookkeeping
+        # message, and clients like to auto-reply to it.
+        dashboard_id = self.store.pinned_message_id(message.chat_id, message.thread_id)
+        if (
+            trigger is not None
+            and trigger.kind == "reply"
+            and dashboard_id
+            and message.quote is not None
+            and message.quote.message_id == dashboard_id
+        ):
+            return
         if trigger is None:
             return
 

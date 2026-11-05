@@ -25,7 +25,7 @@ from app.opencode.events import (
 )
 from app.store import Store
 from app.telegram.dashboard import dashboard_text
-from app.telegram.footer import RunStats, format_cost, format_footer, format_tokens
+from app.telegram.footer import RunStats, format_cost, format_tokens
 from app.telegram.identity import attribution_prefix, build_prompt
 from app.telegram.keyboards import context_label, main_menu
 from app.telegram.messenger import Messenger
@@ -360,8 +360,7 @@ class Runner:
 
         if self.messenger is None:
             return
-        footer = format_footer(stats).lstrip("— ").strip()
-        text = f"✅ I'm done · {footer}" if footer else "✅ I'm done"
+        text = "✅ I'm done"
         model = (
             f"{stats.provider}/{stats.model}" if stats.provider and stats.model else None
         )

@@ -82,19 +82,20 @@ async def test_answer_signs_off_when_done(bot_app: BotApp, messenger) -> None:
     await send(bot_app, update("sign off", chat_type="private", chat_id=111, update_id=121))
     await wait_for(lambda: any("I'm done" in item.text for item in messenger.sent))
     signoff = next(item for item in messenger.sent if "I'm done" in item.text)
-    assert signoff.text.startswith("✅ I'm done · flash")
+    assert signoff.text == "✅ I'm done"
     labels = [b.text for row in signoff.keyboard.keyboard for b in row]
     assert labels[0] == "🧠 go/flash"
     assert labels[1] == "📊 42K / 200K (21%)"
 
 
-async def test_answer_carries_the_consumption_footer(bot_app: BotApp, messenger) -> None:
+async def test_consumption_lives_in_the_card_not_in_chat_noise(
+    bot_app: BotApp, messenger
+) -> None:
     await send(bot_app, update("how are you", chat_type="private", chat_id=111, update_id=41))
-    await wait_for(lambda: any("(21%)" in item.text for item in messenger.sent))
+    await wait_for(lambda: any("context 42K/200K (21%)" in item.text for item in messenger.sent))
 
     signoff = next(item for item in messenger.sent if "I'm done" in item.text)
-    assert "42K/200K (21%)" in signoff.text
-    assert "flash" in signoff.text
+    assert "%" not in signoff.text and "$" not in signoff.text
 
 
 async def test_run_updates_and_pins_a_dashboard(bot_app: BotApp, messenger, store) -> None:
