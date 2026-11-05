@@ -11,7 +11,14 @@ import logging
 from typing import Any
 
 from telegram import Update
-from telegram.ext import Application, CallbackQueryHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    ContextTypes,
+    MessageHandler,
+    TypeHandler,
+    filters,
+)
 
 from app.config import Settings
 from app.health import HealthState
@@ -74,10 +81,35 @@ class BotApp:
             .concurrent_updates(True)
             .build()
         )
+        # Registered first, so every delivered update is visible in the log even
+        # when the intake path drops it.
+        application.add_handler(TypeHandler(Update, self.on_any_update), group=-1)
         application.add_handler(MessageHandler(filters.ALL, self.on_message))
         application.add_handler(CallbackQueryHandler(self.on_callback))
         application.add_error_handler(self.on_error)
         return application
+
+    async def on_any_update(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        kind = next(
+            (
+                name
+                for name in (
+                    "message",
+                    "edited_message",
+                    "channel_post",
+                    "callback_query",
+                    "my_chat_member",
+                    "chat_member",
+                )
+                if getattr(update, name, None) is not None
+            ),
+            "other",
+        )
+        chat = getattr(getattr(update, "effective_chat", None), "id", None)
+        log.info(
+            "update delivered",
+            extra={"update_id": update.update_id, "chat_id": chat, "event": kind},
+        )
 
     async def on_error(self, update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Never fail silently: log the cause and tell the chat something broke."""
