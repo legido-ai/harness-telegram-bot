@@ -110,10 +110,12 @@ class TelegramMessenger:
         except Exception as exc:
             log.debug("could not delete %s: %s", message_id, type(exc).__name__)
 
-    async def pin(self, chat_id: int, message_id: int) -> None:
+    async def pin(self, chat_id: int, message_id: int) -> bool:
         try:
             await self._bot.pin_chat_message(
                 chat_id=chat_id, message_id=message_id, disable_notification=True
             )
+            return True
         except Exception as exc:  # a group without pin rights must not break a run
-            log.warning("could not pin the dashboard: %s", type(exc).__name__)
+            log.info("cannot pin the dashboard here: %s", type(exc).__name__)
+            return False

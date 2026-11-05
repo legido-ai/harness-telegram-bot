@@ -76,6 +76,8 @@ class Runner:
         self._queues: dict[tuple[int, int], asyncio.Queue[Job]] = {}
         self._workers: dict[tuple[int, int], asyncio.Task[None]] = {}
         self._active_session: dict[tuple[int, int], str] = {}
+        # Chats where pinning is refused (plain member, no rights): stop asking.
+        self._pin_denied: set[tuple[int, int]] = set()
         self._started = False
 
     # -- lifecycle -------------------------------------------------------
@@ -398,7 +400,14 @@ class Runner:
             await self.messenger.unpin(message.chat_id, existing)
             await self.messenger.delete_message(message.chat_id, existing)
         self._store.set_pinned_message_id(message.chat_id, message.thread_id, message_id)
-        await self.messenger.pin(message.chat_id, message_id)
+        if message.key not in self._pin_denied:
+            pinned = await self.messenger.pin(message.chat_id, message_id)
+            if not pinned:
+                self._pin_denied.add(message.key)
+                log.info(
+                    "dashboard will stay a normal message in this chat (no pin rights)",
+                    extra={"chat_id": message.chat_id},
+                )
         return message_id
 
     @staticmethod

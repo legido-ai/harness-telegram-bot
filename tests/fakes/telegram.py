@@ -76,8 +76,9 @@ class FakeMessenger:
     async def send_typing(self, chat_id: int, thread_id: int = 0) -> None:
         self.typing.append((chat_id, thread_id))
 
-    async def pin(self, chat_id: int, message_id: int) -> None:
+    async def pin(self, chat_id: int, message_id: int) -> bool:
         self.pinned.append((chat_id, message_id))
+        return True
 
     async def unpin(self, chat_id: int, message_id: int) -> None:
         self.unpinned.append((chat_id, message_id))

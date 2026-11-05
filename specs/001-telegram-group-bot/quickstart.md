@@ -46,9 +46,12 @@ curl -s localhost:8080/healthz | jq
 
 ## 5. Wire the group
 
-1. Add the bot to the group.
+1. Add the bot to the group. **Admin rights are optional**: they are only
+   needed to pin the status card and to let the bot see every message. As a
+   plain member it still answers mentions and replies, and the card is simply a
+   normal message it keeps editing.
 2. Keep privacy mode as is (default on). The bot only answers mentions and
-   replies either way, so nothing changes if you later disable it.
+   replies to its own messages either way.
 3. Post `/id@your_bot` in the group to confirm the allowlisted chat id, and add
    it to `TELEGRAM_ALLOWED_CHAT_IDS` if you set that variable.
 4. Mention the bot: `@your_bot summarise what we just decided` — the answer
