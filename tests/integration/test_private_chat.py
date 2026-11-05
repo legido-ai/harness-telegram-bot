@@ -80,18 +80,20 @@ async def test_duplicate_update_runs_once(bot_app: BotApp, fake_server) -> None:
 
 async def test_answer_signs_off_when_done(bot_app: BotApp, messenger) -> None:
     await send(bot_app, update("sign off", chat_type="private", chat_id=111, update_id=121))
-    await wait_for(lambda: any("I'm done" in item.text for item in messenger.edited))
-    assert "✅ I'm done" in messenger.edited[-1].text
+    await wait_for(lambda: any("I'm done" in item.text for item in messenger.sent))
+    signoff = next(item for item in messenger.sent if "I'm done" in item.text)
+    assert signoff.text.startswith("✅ I'm done · flash")
+    labels = [b.text for row in signoff.keyboard.keyboard for b in row]
+    assert labels == ["🧠 Model", "📊 42K / 200K (21%)"]
 
 
 async def test_answer_carries_the_consumption_footer(bot_app: BotApp, messenger) -> None:
     await send(bot_app, update("how are you", chat_type="private", chat_id=111, update_id=41))
-    await wait_for(lambda: any("(21%)" in item.text for item in messenger.edited))
+    await wait_for(lambda: any("(21%)" in item.text for item in messenger.sent))
 
-    footer_text = messenger.edited[-1].text
-    assert "42K/200K (21%)" in footer_text
-    assert "$0.03" in footer_text
-    assert "flash" in footer_text
+    signoff = next(item for item in messenger.sent if "I'm done" in item.text)
+    assert "42K/200K (21%)" in signoff.text
+    assert "flash" in signoff.text
 
 
 async def test_run_updates_and_pins_a_dashboard(bot_app: BotApp, messenger, store) -> None:

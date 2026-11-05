@@ -268,9 +268,8 @@ class Runner:
                 editor.append(failure or "The agent finished without producing an answer.")
                 status = "failed" if failure else status
                 error_kind = error_kind or ("agent_error" if failure else "empty_answer")
-            done_line = "✅ I'm done"
-            footer = format_footer(stats)
-            await editor.finish(f"{done_line}\n{footer}" if footer else done_line)
+            await editor.finish()
+            await self._sign_off(message, stats)
             await self._refresh_dashboard(message, stats, status)
         except SessionGone:
             self._store.clear_session(message.chat_id, message.thread_id)
@@ -348,6 +347,26 @@ class Runner:
             return None
         error = usage.get("error")
         return f"⚠️ {error}" if isinstance(error, str) and error else None
+
+    async def _sign_off(self, message: Inbound, stats: RunStats) -> None:
+        """Close the run with the one message that can also carry the keyboard.
+
+        Telegram refuses to edit a message that holds a reply keyboard and
+        refuses to attach one on edit, so a fresh message is the only way the
+        context button can show current numbers.
+        """
+
+        if self.messenger is None:
+            return
+        footer = format_footer(stats).lstrip("— ").strip()
+        label = context_label(stats.used_tokens, stats.limit_tokens)
+        text = f"✅ I'm done · {footer}" if footer else "✅ I'm done"
+        await self.messenger.send_text(
+            message.chat_id,
+            text,
+            thread_id=message.thread_id,
+            keyboard=main_menu(label),
+        )
 
     async def _refresh_dashboard(
         self, message: Inbound, stats: RunStats, status: str = "idle"
