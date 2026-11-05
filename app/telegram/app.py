@@ -185,7 +185,10 @@ class BotApp:
             bookkeeping = (message.quote.text or "").strip() in ("✅ I'm done",)
             bookkeeping = bookkeeping or (dashboard_id and message.quote.message_id == dashboard_id)
             bookkeeping = bookkeeping or (message.quote.text or "").startswith("📊")
-            if bookkeeping:
+            # Only ignore it when the human did not address the bot explicitly:
+            # an auto-reply plus a mention is still a request.
+            mentioned = any(e.type in ("mention", "text_mention") for e in message.entities)
+            if bookkeeping and not mentioned:
                 return
         if trigger is None:
             return
