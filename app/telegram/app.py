@@ -249,21 +249,73 @@ class BotApp:
         session_id, _ = await self.runner.ensure_session(message)
         try:
             models = await self.client.models()
+            providers = await self.client.providers()
         except OpenCodeError as exc:
             await self._reply(message, exc.user_message)
             return
-        entries: list[tuple[str, str, str]] = []
-        for item in models[:10]:
-            provider = str(item.get("providerID") or item.get("provider") or "?")
-            model_id = str(item.get("modelID") or item.get("id") or "?")
-            label = str(item.get("name") or model_id)
-            token = self._token("m", session_id, provider, model_id)
-            entries.append((token, label))
-        if not entries:
+
+        names = {
+            str(p.get("id")): str(p.get("name") or p.get("id"))
+            for p in providers
+            if p.get("id")
+        }
+        counts: dict[str, int] = {}
+        for item in models:
+            provider = str(item.get("providerID") or "?")
+            counts[provider] = counts.get(provider, 0) + 1
+        if not counts:
             await self._reply(message, "The server reported no models.")
             return
+
+        if len(counts) == 1:
+            only = next(iter(counts))
+            await self._show_models(message, session_id, only, names.get(only, only), models)
+            return
+
+        entries = [
+            (self._token("p", session_id, provider), f"{names.get(provider, provider)} ({count})")
+            for provider, count in sorted(counts.items(), key=lambda item: item[0])
+        ]
         await self._reply(
-            message, "Pick a model for this conversation:", keyboards.model_keyboard(entries)
+            message,
+            f"Current: {await self._current_model(message)}\nChoose a provider:",
+            keyboards.provider_keyboard(entries),
+        )
+
+    async def _current_model(self, message: Inbound) -> str:
+        conversation = self.store.get_conversation(message.chat_id, message.thread_id)
+        model = conversation.model if conversation else None
+        if model:
+            return f"{model['providerID']}/{model['modelID']}"
+        return "server default"
+
+    async def _show_models(
+        self,
+        message: Inbound,
+        session_id: str,
+        provider_id: str,
+        provider_name: str,
+        models: list[dict[str, Any]] | None = None,
+    ) -> None:
+        if models is None:
+            try:
+                models = await self.client.models()
+            except OpenCodeError as exc:
+                await self._reply(message, exc.user_message)
+                return
+        mine = [m for m in models if str(m.get("providerID")) == provider_id]
+        entries = [
+            (self._token("m", session_id, provider_id, str(m.get("modelID") or m.get("id"))),
+             str(m.get("name") or m.get("modelID")))
+            for m in mine[:20]
+        ]
+        if not entries:
+            await self._reply(message, f"{provider_name} reports no models.")
+            return
+        await self._reply(
+            message,
+            f"{provider_name} — {len(mine)} models\nCurrent: {await self._current_model(message)}",
+            keyboards.model_keyboard(entries),
         )
 
     async def _cmd_agent(self, message: Inbound, argument: str) -> None:
@@ -299,7 +351,9 @@ class BotApp:
         self.authorizer.register(message)
 
         action, parts = keyboards.parse_callback(message.callback_data)
-        if action == "p":
+        if action == "P":
+            await self._callback_provider(message, parts)
+        elif action == "p":
             await self._callback_permission(message, parts)
         elif action == "f":
             await self._callback_form(message, parts)
@@ -369,6 +423,26 @@ class BotApp:
                 message.message_id,
                 f"Answered by {message.display_name}: {choice}",
             )
+
+    async def _callback_provider(self, message: Inbound, parts: list[str]) -> None:
+        if not parts:
+            return
+        choice = self._choices.get(parts[0])
+        if choice is None:
+            if self.messenger:
+                await self.messenger.answer_callback(message.callback_id or "", "This control has expired.")
+            return
+        _, session_id, provider_id, _ = choice
+        try:
+            providers = await self.client.providers()
+        except OpenCodeError as exc:
+            await self._reply(message, exc.user_message)
+            return
+        name = next(
+            (str(p.get("name")) for p in providers if str(p.get("id")) == provider_id),
+            provider_id,
+        )
+        await self._show_models(message, session_id, provider_id, name)
 
     async def _callback_model(self, message: Inbound, parts: list[str]) -> None:
         if not parts:

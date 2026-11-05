@@ -73,6 +73,12 @@ def form_keyboard(session_id: str, form_id: str, options: list[str]) -> Any:
     return _markup(rows)
 
 
+def provider_keyboard(providers: list[tuple[str, str]]) -> Any:
+    """``providers`` items are (token, label)."""
+
+    return _markup([[(label[:40], f"P:{token}")] for token, label in providers[:12]])
+
+
 def model_keyboard(models: list[tuple[str, str]]) -> Any:
     """``models`` items are (token, label); tokens keep callback data short."""
 

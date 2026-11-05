@@ -182,6 +182,12 @@ class OpenCodeClient:
             data = data.get("models") or data.get("items") or []
         return list(data or [])
 
+    async def providers(self) -> list[dict[str, Any]]:
+        data = await self._json("GET", "/api/provider")
+        if isinstance(data, dict):
+            data = data.get("providers") or data.get("items") or []
+        return list(data or [])
+
     async def agents(self) -> list[dict[str, Any]]:
         data = await self._json("GET", "/api/agent")
         if isinstance(data, dict):

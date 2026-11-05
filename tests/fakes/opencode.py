@@ -186,6 +186,12 @@ class FakeOpenCode:
                 },
             )
 
+        if path == "/api/provider":
+            return httpx.Response(
+                200,
+                json={"data": [{"id": "go", "name": "OpenCode Go", "activation": "enabled"}]},
+            )
+
         if path == "/api/agent":
             return httpx.Response(200, json={"data": [{"id": "build"}, {"id": "plan"}]})
 
