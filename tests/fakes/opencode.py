@@ -156,7 +156,10 @@ class FakeOpenCode:
             parts = path.split("/")
             session_id = parts[3]
             body = json.loads(request.content or b"{}")
-            self.model_calls.append((session_id, body["providerID"], body["modelID"]))
+            model = body.get("model")
+            if not isinstance(model, dict) or "id" not in model:
+                return httpx.Response(400, json={"error": "InvalidRequest"})
+            self.model_calls.append((session_id, model["providerID"], model["id"]))
             return httpx.Response(204)
 
         if path.endswith("/agent") and method == "POST":

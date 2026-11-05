@@ -305,8 +305,10 @@ class BotApp:
                 return
         mine = [m for m in models if str(m.get("providerID")) == provider_id]
         entries = [
-            (self._token("m", session_id, provider_id, str(m.get("modelID") or m.get("id"))),
-             str(m.get("name") or m.get("modelID")))
+            (
+                self._token("m", session_id, provider_id, str(m.get("modelID") or m.get("id"))),
+                f"{provider_id}/{m.get('modelID') or m.get('id')}",
+            )
             for m in mine[:20]
         ]
         if not entries:

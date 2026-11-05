@@ -21,5 +21,9 @@ class Busy(OpenCodeError):
     user_message = "the agent is still working on the previous request."
 
 
+class InvalidRequest(OpenCodeError):
+    user_message = "the agent server rejected that choice."
+
+
 class Unavailable(OpenCodeError):
     user_message = "the agent server is unreachable right now."

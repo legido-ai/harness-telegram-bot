@@ -8,14 +8,17 @@ call these methods and never build URLs themselves (constitution Principle VIII)
 from __future__ import annotations
 
 import base64
+import logging
 from collections.abc import Sequence
 from typing import Any
 
 import httpx
 
-from app.opencode.errors import AuthError, Busy, SessionGone, Unavailable
+from app.opencode.errors import AuthError, Busy, InvalidRequest, SessionGone, Unavailable
 
 PERMISSION_DECISIONS = ("once", "always", "reject")
+
+log = logging.getLogger("bot.opencode")
 
 
 def _data(payload: Any) -> Any:
@@ -74,7 +77,10 @@ class OpenCodeClient:
         if response.status_code >= 500:
             raise Unavailable()
         if response.status_code >= 400:
-            raise Unavailable()
+            # 400 means we sent something the server refuses: an incoming bug,
+            # not an outage. Log the body so the cause is visible.
+            log.warning("agent rejected request: %s %s", response.status_code, response.text[:200])
+            raise InvalidRequest()
         return response
 
     async def _json(self, method: str, path: str, **kwargs: Any) -> Any:
@@ -167,10 +173,11 @@ class OpenCodeClient:
     # -- C8 model and agent ----------------------------------------------
 
     async def set_model(self, session_id: str, provider_id: str, model_id: str) -> None:
+        # Contract: {"model": Model.Ref} where Ref uses ``id`` for the model.
         await self._request(
             "POST",
             f"/api/session/{session_id}/model",
-            json={"providerID": provider_id, "modelID": model_id},
+            json={"model": {"providerID": provider_id, "id": model_id}},
         )
 
     async def set_agent(self, session_id: str, agent: str) -> None:
