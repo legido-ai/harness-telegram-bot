@@ -78,14 +78,15 @@ async def test_duplicate_update_runs_once(bot_app: BotApp, fake_server) -> None:
     assert len(fake_server.prompts) == 1
 
 
-async def test_answer_signs_off_when_done(bot_app: BotApp, messenger) -> None:
+async def test_one_message_per_answer(bot_app: BotApp, messenger) -> None:
     await send(bot_app, update("sign off", chat_type="private", chat_id=111, update_id=121))
-    await wait_for(lambda: any("I'm done" in item.text for item in messenger.sent))
-    signoff = next(item for item in messenger.sent if "I'm done" in item.text)
-    assert signoff.text == "✅ I'm done"
-    labels = [b.text for row in signoff.keyboard.keyboard for b in row]
-    assert labels[0] == "🧠 go/flash"
-    assert labels[1] == "📊 42K / 200K (21%)"
+    await wait_for(lambda: any("I'm done" in item.text for item in messenger.sent + messenger.edited))
+
+    answers = [m for m in messenger.sent + messenger.edited if "Hello" in m.text]
+    done = [m for m in messenger.sent + messenger.edited if m.text.strip() == "✅ I'm done"]
+    assert answers, "no answer"
+    assert not done, "the done line must not be a message of its own"
+    assert "✅ I'm done" in answers[-1].text
 
 
 async def test_consumption_lives_in_the_card_not_in_chat_noise(
@@ -94,8 +95,8 @@ async def test_consumption_lives_in_the_card_not_in_chat_noise(
     await send(bot_app, update("how are you", chat_type="private", chat_id=111, update_id=41))
     await wait_for(lambda: any("context 42K/200K (21%)" in item.text for item in messenger.sent))
 
-    signoff = next(item for item in messenger.sent if "I'm done" in item.text)
-    assert "%" not in signoff.text and "$" not in signoff.text
+    answer = next(item for item in messenger.edited if "Hello" in item.text)
+    assert "%" not in answer.text and "$" not in answer.text
 
 
 async def test_run_updates_and_pins_a_dashboard(bot_app: BotApp, messenger, store) -> None:
@@ -190,9 +191,11 @@ async def test_new_session_resets_the_context_counter(bot_app: BotApp, messenger
     assert labels == ["🧠 Model", "📊 0 / 200K (0%)"]
 
 
-async def test_replying_to_the_signoff_does_not_trigger(bot_app: BotApp, fake_server, messenger) -> None:
+async def test_replying_to_an_auto_quoted_answer_does_not_trigger(
+    bot_app: BotApp, fake_server, messenger
+) -> None:
     await send(bot_app, update("first", chat_type="private", chat_id=111, update_id=141))
-    await wait_for(lambda: any("I'm done" in item.text for item in messenger.sent))
+    await wait_for(lambda: any("I'm done" in item.text for item in messenger.edited))
     prompts_before = len(fake_server.prompts)
 
     from tests.telegram_factory import message_payload
@@ -200,6 +203,9 @@ async def test_replying_to_the_signoff_does_not_trigger(bot_app: BotApp, fake_se
     done = message_payload(
         text="✅ I'm done", chat_id=111, chat_type="private", user_id=424242, first_name="Bot", is_bot=True
     )
-    await send(bot_app, update("accidental reply", chat_type="private", chat_id=111, update_id=142, reply_to=done))
+    await send(
+        bot_app,
+        update("accidental reply", chat_type="private", chat_id=111, update_id=142, reply_to=done),
+    )
     await wait_for(lambda: True, timeout=0.5)
     assert len(fake_server.prompts) == prompts_before
