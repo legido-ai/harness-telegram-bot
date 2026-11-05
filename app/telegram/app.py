@@ -107,6 +107,14 @@ class BotApp:
         if message.is_bot:
             log.debug("ignoring message from a bot")
             return
+        log.info(
+            "update received",
+            extra={
+                "update_id": message.update_id,
+                "chat_id": message.chat_id,
+                "session_id": f"{message.chat_type}/text={len(message.text)}/entities={len(message.entities)}",
+            },
+        )
         if not self.authorizer.allow(message):
             return
         if not self.store.mark_seen(message.update_id):

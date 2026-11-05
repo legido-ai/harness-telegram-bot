@@ -22,6 +22,22 @@ from app.telegram.app import BotApp
 from app.telegram.runner import Runner
 
 AGENT_POLL_INTERVAL = 60.0
+POLLER_CHECK_INTERVAL = 15.0
+
+
+async def _poller_watch(application, state: HealthState, stop: asyncio.Event) -> None:
+    """Health must reflect the updater, not just the fact that we started it.
+
+    A dead or conflicted poller keeps the process alive and used to look healthy.
+    """
+
+    while not stop.is_set():
+        updater = getattr(application, "updater", None)
+        state.poller_alive = bool(updater and updater.running)
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=POLLER_CHECK_INTERVAL)
+        except TimeoutError:
+            continue
 
 
 async def _agent_watch(client: OpenCodeClient, state: HealthState, stop: asyncio.Event) -> None:
@@ -106,6 +122,7 @@ async def run() -> int:
             consume_events(client, bus, stop, on_state=state.note_sse), name="events"
         ),
         asyncio.create_task(_agent_watch(client, state, stop), name="agent-watch"),
+        asyncio.create_task(_poller_watch(application, state, stop), name="poller-watch"),
     ]
 
     log.info("bot started", extra={"event": f"health on {settings.health_host}:{settings.health_port}"})
