@@ -188,3 +188,18 @@ async def test_new_session_resets_the_context_counter(bot_app: BotApp, messenger
     assert keyboard_messages, "the /new reply must carry the reset keyboard"
     labels = [b.text for row in keyboard_messages[-1].keyboard.keyboard for b in row]
     assert labels == ["🧠 Model", "📊 0 / 200K (0%)"]
+
+
+async def test_replying_to_the_signoff_does_not_trigger(bot_app: BotApp, fake_server, messenger) -> None:
+    await send(bot_app, update("first", chat_type="private", chat_id=111, update_id=141))
+    await wait_for(lambda: any("I'm done" in item.text for item in messenger.sent))
+    prompts_before = len(fake_server.prompts)
+
+    from tests.telegram_factory import message_payload
+
+    done = message_payload(
+        text="✅ I'm done", chat_id=111, chat_type="private", user_id=424242, first_name="Bot", is_bot=True
+    )
+    await send(bot_app, update("accidental reply", chat_type="private", chat_id=111, update_id=142, reply_to=done))
+    await wait_for(lambda: True, timeout=0.5)
+    assert len(fake_server.prompts) == prompts_before

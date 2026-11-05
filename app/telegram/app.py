@@ -178,17 +178,15 @@ class BotApp:
             bot_username=self.bot_username,
             policy=policy,
         )
-        # Quoting the status card is not a request: it is the bot's own bookkeeping
-        # message, and clients like to auto-reply to it.
-        dashboard_id = self.store.pinned_message_id(message.chat_id, message.thread_id)
-        if (
-            trigger is not None
-            and trigger.kind == "reply"
-            and dashboard_id
-            and message.quote is not None
-            and message.quote.message_id == dashboard_id
-        ):
-            return
+        # Quoting the bot's own bookkeeping is not a request: the status card and
+        # the sign-off line are the messages clients auto-reply to.
+        if trigger is not None and trigger.kind == "reply" and message.quote is not None:
+            dashboard_id = self.store.pinned_message_id(message.chat_id, message.thread_id)
+            bookkeeping = (message.quote.text or "").strip() in ("✅ I'm done",)
+            bookkeeping = bookkeeping or (dashboard_id and message.quote.message_id == dashboard_id)
+            bookkeeping = bookkeeping or (message.quote.text or "").startswith("📊")
+            if bookkeeping:
+                return
         if trigger is None:
             return
 
