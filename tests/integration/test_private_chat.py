@@ -96,9 +96,8 @@ async def test_run_updates_and_pins_a_dashboard(bot_app: BotApp, messenger, stor
     assert dashboard, "no dashboard message"
     assert "context 42K/200K (21%)" in dashboard[0].text
     assert store.pinned_message_id(111, 0) == messenger.pinned[0][1]
-    keyboard_messages = [item for item in messenger.sent if item.keyboard is not None]
-    labels = [button.text for row in keyboard_messages[-1].keyboard.keyboard for button in row]
-    assert labels == ["🧠 Model", "📊 42K / 200K (21%)"]
+    # No extra "keyboard updated" chatter: the card itself carries the numbers.
+    assert not any("Keyboard updated" in item.text for item in messenger.sent)
 
 
 async def test_second_run_edits_the_same_dashboard(bot_app: BotApp, messenger) -> None:
@@ -176,6 +175,6 @@ async def test_new_session_resets_the_context_counter(bot_app: BotApp, messenger
     )
     await wait_for(lambda: any("context 0/200K (0%)" in item.text for item in messenger.edited))
     keyboard_messages = [item for item in messenger.sent if item.keyboard is not None]
-    assert keyboard_messages, "no keyboard refresh sent"
+    assert keyboard_messages, "the /new reply must carry the reset keyboard"
     labels = [b.text for row in keyboard_messages[-1].keyboard.keyboard for b in row]
     assert labels == ["🧠 Model", "📊 0 / 200K (0%)"]

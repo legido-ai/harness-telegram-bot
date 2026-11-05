@@ -76,8 +76,6 @@ class Runner:
         self._queues: dict[tuple[int, int], asyncio.Queue[Job]] = {}
         self._workers: dict[tuple[int, int], asyncio.Task[None]] = {}
         self._active_session: dict[tuple[int, int], str] = {}
-        self._last_label: dict[tuple[int, int], str] = {}
-        self._last_keyboard_at: dict[tuple[int, int], float] = {}
         self._started = False
 
     # -- lifecycle -------------------------------------------------------
@@ -272,7 +270,6 @@ class Runner:
                 error_kind = error_kind or ("agent_error" if failure else "empty_answer")
             await editor.finish(format_footer(stats))
             await self._refresh_dashboard(message, stats, status)
-            await self._push_keyboard(message, stats)
         except SessionGone:
             self._store.clear_session(message.chat_id, message.thread_id)
             status, error_kind = "failed", "session_gone"
@@ -381,27 +378,6 @@ class Runner:
         await self.messenger.pin(message.chat_id, message_id)
         return message_id
 
-    async def _push_keyboard(self, message: Inbound, stats: RunStats | None) -> None:
-        if self.messenger is None:
-            return
-        label = context_label(
-            stats.used_tokens if stats else None, stats.limit_tokens if stats else None
-        )
-        key = message.key
-        now = time.monotonic()
-        if self._last_label.get(key) == label:
-            return
-        if now - self._last_keyboard_at.get(key, 0.0) < 2.0:
-            return
-        self._last_label[key] = label
-        self._last_keyboard_at[key] = now
-        await self.messenger.send_text(
-            message.chat_id,
-            "⌨️ Keyboard updated",
-            thread_id=message.thread_id,
-            keyboard=main_menu(label),
-        )
-
     @staticmethod
     def _keyboard_for(stats: RunStats | None) -> Any:
         return main_menu(
@@ -422,7 +398,6 @@ class Runner:
                 session_id, created=False, seconds=None, model_hint=conversation.model
             )
         await self._refresh_dashboard(message, stats or RunStats(), "idle")
-        await self._push_keyboard(message, stats)
 
     async def keyboard(self, message: Inbound) -> Any:
         """Keyboard carrying the current usage, for on-demand commands."""
