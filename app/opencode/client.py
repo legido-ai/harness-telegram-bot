@@ -109,7 +109,11 @@ class OpenCodeClient:
         if agent:
             body["agent"] = agent
         if model:
-            body["model"] = model
+            # Session create expects Model.Ref: the model id travels as ``id``.
+            body["model"] = {
+                "providerID": model.get("providerID"),
+                "id": model.get("modelID") or model.get("id"),
+            }
         data = await self._json("POST", "/api/session", json=body)
         session_id = (data or {}).get("id")
         if not session_id:

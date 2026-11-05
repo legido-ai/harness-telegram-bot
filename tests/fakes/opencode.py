@@ -76,6 +76,12 @@ class FakeOpenCode:
 
         if path == "/api/session" and method == "POST":
             body = json.loads(request.content or b"{}")
+            model = body.get("model")
+            if model is not None and "id" not in model:
+                return httpx.Response(
+                    400,
+                    json={"_tag": "InvalidRequestError", "message": "Missing key at [\"model\"][\"id\"]"},
+                )
             session_id = self._session_id()
             self.sessions[session_id] = {"id": session_id, "title": body.get("title")}
             return httpx.Response(200, json={"data": self.sessions[session_id]})

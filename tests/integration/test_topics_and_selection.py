@@ -71,3 +71,13 @@ async def test_agent_choice_is_stored(bot_app: BotApp, fake_server, store, messe
     await bot_app.on_callback(callback_update(f"a:{token}", update_id=81), SimpleNamespace(bot=None))
     await wait_for(lambda: len(fake_server.agent_calls) == 1)
     assert store.get_conversation(-100123, 0).agent == "plan"
+
+
+async def test_new_session_with_a_chosen_model(bot_app, store, fake_server) -> None:
+    store.touch_conversation(111, 0, "private", None)
+    store.set_model(111, 0, {"providerID": "go", "modelID": "flash"})
+    inbound = bot_app._inbound(update("/new", chat_type="private", chat_id=111, update_id=131))
+    await bot_app._cmd_new(inbound, "")
+    conversation = store.get_conversation(111, 0)
+    assert conversation.active_session_id is not None
+    assert conversation.active_session_id in fake_server.sessions

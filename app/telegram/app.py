@@ -76,7 +76,24 @@ class BotApp:
         )
         application.add_handler(MessageHandler(filters.ALL, self.on_message))
         application.add_handler(CallbackQueryHandler(self.on_callback))
+        application.add_error_handler(self.on_error)
         return application
+
+    async def on_error(self, update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Never fail silently: log the cause and tell the chat something broke."""
+
+        log.exception("handler failed", exc_info=context.error)
+        message = from_update(update, self.bot_id) if hasattr(update, "update_id") else None
+        if message is None or self.messenger is None:
+            return
+        try:
+            await self.messenger.send_text(
+                message.chat_id,
+                "That command failed inside the bot. The error is logged; try again.",
+                thread_id=message.thread_id,
+            )
+        except Exception:
+            log.debug("could not report the failure to the chat")
 
     # -- intake ----------------------------------------------------------
 
