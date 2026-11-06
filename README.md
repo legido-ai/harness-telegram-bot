@@ -44,6 +44,18 @@ Telegram ──long poll──► app.telegram.app  ──► trigger + identity
   room are answered in order and sessions never interleave.
 - `app/store.py` is the durable memory; `app/health.py` is the operator view.
 
+## Container image
+
+Public, no credentials needed:
+
+```bash
+docker pull ghcr.io/legido-ai/opencode-telegram-bot:0.1.1   # or :latest
+```
+
+Multi-arch (`linux/amd64` and `linux/arm64`), built by `.github/workflows/publish.yml`
+on every push to `main` and on `v*` tags. Tags published: `latest`, the
+`pyproject.toml` version, and `sha-<commit>`.
+
 ## Quickstart
 
 ```bash

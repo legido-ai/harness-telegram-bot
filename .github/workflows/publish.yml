@@ -39,6 +39,9 @@ jobs:
         with:
           context: .
           push: true
+          # The host is arm64 (A1.Flex) while CI is amd64: publish both or the
+          # image is useless where it actually runs.
+          platforms: linux/amd64,linux/arm64
           tags: |
             ghcr.io/${{ github.repository }}:latest
             ghcr.io/${{ github.repository }}:${{ steps.version.outputs.value }}
