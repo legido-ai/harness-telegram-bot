@@ -45,7 +45,9 @@ Voice notes and spoken replies, matching the bridge currently running in OC2
 
 - `deploy/sandbox-compose.yml` joins `box_default` and points at
   `http://opencode-stt:9000/v1` with `TTS_PROVIDER=edge`, matching OC2.
-- Version bumped to 0.2.0; new dependency `edge-tts==7.3.1`.
+- Version bumped to 0.2.0; new dependency `edge-tts==7.3.1` is part of the
+  default image, so TTS requires no extra install. STT ships its client in the
+  image and uses the separate `opencode-stt` Whisper service for the model.
 
 ## [0.1.1] — 2026-11-05
 

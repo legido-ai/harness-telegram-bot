@@ -51,12 +51,18 @@ Telegram ──long poll──► app.telegram.app  ──► trigger + identity
 Public, no credentials needed:
 
 ```bash
-docker pull ghcr.io/legido-ai/opencode-telegram-bot:0.1.1   # or :latest
+docker pull ghcr.io/legido-ai/opencode-telegram-bot:0.2.0   # or :latest
 ```
 
 Multi-arch (`linux/amd64` and `linux/arm64`), built by `.github/workflows/publish.yml`
 on every push to `main` and on `v*` tags. Tags published: `latest`, the
 `pyproject.toml` version, and `sha-<commit>`.
+
+The image **includes the speech dependencies by default**: `edge-tts` is in
+`requirements.txt`, so TTS needs no extra install. STT includes the client and
+expects `STT_API_URL` to point at a Whisper-compatible service; the Whisper
+model itself is the separate `opencode-stt` container, not bundled in the bot
+image. The old `0.1.1` image predates speech and should not be used for voice.
 
 ## Quickstart
 
