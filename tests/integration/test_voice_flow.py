@@ -143,6 +143,59 @@ async def test_tts_modes_control_audio_replies(settings, store, client, bus, hea
     assert messenger.audio[0].data == b"ID3fake-mp3"
 
 
+async def test_voice_reply_is_spoken_by_default(
+    settings, store, client, bus, health, messenger, fake_server
+) -> None:
+    tts = FakeTts()
+    runner = Runner(
+        settings=settings, store=store, client=client, bus=bus, messenger=messenger, tts=tts
+    )
+    app = BotApp(
+        settings=settings,
+        store=store,
+        client=client,
+        runner=runner,
+        state=health,
+        stt=FakeStt(),
+    )
+    app.bot_id = BOT_ID
+    app.bot_username = BOT_USERNAME
+    app.messenger = messenger
+
+    await send_voice(app, voice_update(chat_id=111, chat_type="private", update_id=30), FakeBot())
+
+    await wait_for(lambda: bool(messenger.audio))
+    assert tts.texts == ["Hello from the agent"]
+    assert fake_server.prompts
+
+
+async def test_tts_off_keeps_voice_answers_silent(
+    settings, store, client, bus, health, messenger, fake_server
+) -> None:
+    tts = FakeTts()
+    runner = Runner(
+        settings=settings, store=store, client=client, bus=bus, messenger=messenger, tts=tts
+    )
+    app = BotApp(
+        settings=settings,
+        store=store,
+        client=client,
+        runner=runner,
+        state=health,
+        stt=FakeStt(),
+    )
+    app.bot_id = BOT_ID
+    app.bot_username = BOT_USERNAME
+    app.messenger = messenger
+
+    await app._cmd_tts(app._inbound(update("/tts off", chat_id=111, chat_type="private")), "off")
+    await send_voice(app, voice_update(chat_id=111, chat_type="private", update_id=31), FakeBot())
+
+    await wait_for(lambda: any("I'm done" in item.text for item in messenger.edited))
+    assert messenger.audio == []
+    assert tts.texts == []
+
+
 async def test_auto_speaks_voice_requests_only(
     settings, store, client, bus, health, messenger, fake_server
 ) -> None:

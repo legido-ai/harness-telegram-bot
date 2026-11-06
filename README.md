@@ -123,9 +123,9 @@ trigger rules as text (mention, reply to a bot message, or a chat set to
 Audio replies work in three modes, per chat or topic:
 
 ```
-/tts off    silence (default)
+/tts auto   speak answers to voice/audio messages (default)
 /tts all    speak every assistant answer
-/tts auto   speak only answers to voice/audio messages
+/tts off    silence
 ```
 
 The old bridge's stack is the recommended one: local whisper.cpp on

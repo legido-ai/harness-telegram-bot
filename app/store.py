@@ -15,8 +15,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 TTS_MODES = ("off", "all", "auto")
+# Voice input is the one case where a spoken answer is unambiguously expected;
+# text stays silent unless the chat explicitly asks for /tts all.
+DEFAULT_TTS_MODE = "auto"
 
 DDL = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -30,7 +33,7 @@ CREATE TABLE IF NOT EXISTS conversations (
     kind              TEXT NOT NULL,
     title             TEXT,
     trigger_policy    TEXT NOT NULL DEFAULT 'mention',
-    tts_mode          TEXT NOT NULL DEFAULT 'off',
+    tts_mode          TEXT NOT NULL DEFAULT 'auto',
     model_json        TEXT,
     agent             TEXT,
     active_session_id TEXT,
@@ -195,6 +198,13 @@ class Store:
                     self._conn.execute(
                         "ALTER TABLE conversations ADD COLUMN tts_mode TEXT NOT NULL DEFAULT 'off'"
                     )
+            if current < 4:
+                # Before v4 "off" was the implicit default, not an explicit
+                # choice. Voice chats should get their spoken answer.
+                self._conn.execute(
+                    "UPDATE conversations SET tts_mode=? WHERE tts_mode='off'",
+                    (DEFAULT_TTS_MODE,),
+                )
             if current < SCHEMA_VERSION:
                 self._conn.execute(
                     "INSERT OR REPLACE INTO meta(key, value) VALUES('schema_version', ?)",
@@ -238,13 +248,15 @@ class Store:
         with self._conn:
             self._conn.execute(
                 """
-                INSERT INTO conversations(chat_id, thread_id, kind, title, created_at, updated_at)
-                VALUES(?, ?, ?, ?, ?, ?)
+                INSERT INTO conversations(
+                    chat_id, thread_id, kind, title, tts_mode, created_at, updated_at
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(chat_id, thread_id) DO UPDATE SET
                     title = COALESCE(excluded.title, conversations.title),
                     updated_at = excluded.updated_at
                 """,
-                (chat_id, thread_id, kind, title, now, now),
+                (chat_id, thread_id, kind, title, DEFAULT_TTS_MODE, now, now),
             )
         conversation = self.get_conversation(chat_id, thread_id)
         assert conversation is not None

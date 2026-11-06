@@ -46,7 +46,7 @@ def test_readyz_reports_schema(settings, store) -> None:
     client = TestClient(create_app(settings, store, HealthState()))
     response = client.get("/readyz")
     assert response.status_code == 200
-    assert response.json()["schema_version"] == 3
+    assert response.json()["schema_version"] == 4
 
 
 def test_audit_endpoint_returns_turns_without_bodies(settings, store) -> None:

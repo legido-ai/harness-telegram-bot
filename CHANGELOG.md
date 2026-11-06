@@ -16,15 +16,17 @@ Voice notes and spoken replies, matching the bridge currently running in OC2
   transcript keeps speaker attribution and quoted context.
 - Group trigger parity for voice: a voice note needs a mention, a reply to the
   bot, or `/trigger all`; a caption-less note stays silent otherwise.
-- `/tts off|all|auto` per chat/topic. `auto` reads only answers to voice notes.
-  Spoken replies are sent as an audio file after the text answer; synthesis
-  failures never lose the answer.
+- `/tts off|all|auto` per chat/topic. `auto` reads only answers to voice notes
+  and is the default, so a spoken question gets a spoken answer without extra
+  setup; `/tts off` keeps a chat silent. Spoken replies are sent as an audio
+  file after the text answer; synthesis failures never lose the answer.
 - TTS providers: Microsoft Edge Read Aloud (no key, default), OpenAI-compatible
   `/audio/speech`, and ElevenLabs. Markdown is stripped and answers over 4000
   characters are skipped.
 - `/status` now reports `audio replies: <mode>`.
-- Schema v3 adds `tts_mode` to conversations; existing databases migrate in
-  place.
+- Schema v4 adds `tts_mode` to conversations with `auto` as the default;
+  existing databases migrate in place and the old implicit `off` becomes
+  `auto` (a later `/tts off` is explicit and sticks).
 
 ### Changed
 
