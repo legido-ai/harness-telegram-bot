@@ -171,13 +171,10 @@ async def test_voice_reply_is_spoken_by_default(
     assert fake_server.prompts
 
 
-async def test_audio_request_hides_the_capability_disclaimer(
+async def test_audio_request_generates_the_phrase_instead_of_using_tools(
     settings, store, client, bus, health, messenger, fake_server
 ) -> None:
-    fake_server.script = [
-        '"Small steps still move you forward."',
-        "\n\nNo puedo generar audio. Solo texto.",
-    ]
+    fake_server.generate_text = '"Small steps still move you forward."'
     tts = FakeTts()
     stt = FakeStt(text="genera un audio corto con una frase.")
     runner = Runner(
@@ -194,6 +191,9 @@ async def test_audio_request_hides_the_capability_disclaimer(
 
     await wait_for(lambda: bool(messenger.audio))
     assert tts.texts == ['"Small steps still move you forward."']
+    assert fake_server.prompts == []
+    assert fake_server.generated
+    assert "genera un audio corto con una frase" in fake_server.generated[0]
     shown = "\n".join(item.text for item in messenger.sent + messenger.edited)
     assert "Small steps still move you forward." in shown
     assert "No puedo generar audio" not in shown

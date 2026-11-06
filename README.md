@@ -128,12 +128,12 @@ Audio replies work in three modes, per chat or topic:
 /tts off    silence
 ```
 
-When a message asks for audio, the bot holds the answer until the turn finishes
-and removes paragraphs where the model explains that it cannot generate or send
-audio. That text is noise: the bot is the one producing the audio. The cleaned
-answer is what appears in the chat and what gets spoken, so the phrase you asked
-for is not buried under a capability disclaimer. This is a text filter in the
-bot, not an instruction injected into the session.
+When a message asks for audio, the bot does **not** send it to the coding agent:
+that agent reaches for tools, builds a TTS script and asks for a phrase. The bot
+instead uses OpenCode's transient text endpoint to produce only the words to
+speak, holds them back until the turn finishes, and removes any capability
+disclaimer. The cleaned phrase is what appears in the chat and what gets spoken.
+Nothing is injected into the session and no tools run.
 
 The old bridge's stack is the recommended one: local whisper.cpp on
 `opencode-stt` plus Edge TTS, which needs no key.

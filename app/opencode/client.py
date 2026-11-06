@@ -130,6 +130,19 @@ class OpenCodeClient:
 
     # -- C4 prompt -------------------------------------------------------
 
+    async def generate(self, session_id: str, prompt: str) -> str:
+        """Transient text from the session context, without mutating history.
+
+        Used for audio requests: the coding agent would otherwise reach for
+        tools and start building a TTS pipeline instead of producing a phrase.
+        """
+
+        data = await self._json(
+            "POST", f"/api/session/{session_id}/generate", json={"prompt": prompt}
+        )
+        text = (data or {}).get("text") if isinstance(data, dict) else None
+        return text.strip() if isinstance(text, str) else ""
+
     async def prompt(
         self,
         session_id: str,

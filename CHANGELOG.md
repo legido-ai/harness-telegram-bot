@@ -24,9 +24,12 @@ Voice notes and spoken replies, matching the bridge currently running in OC2
   `/audio/speech`, and ElevenLabs. Markdown is stripped and answers over 4000
   characters are skipped.
 - `/status` now reports `audio replies: <mode>`.
-- Audio requests are filtered before display and TTS: the model's paragraphs
-  explaining that it cannot generate or send audio are removed, and the answer
-  is held until the filter has run so the disclaimer never flashes on screen.
+- Audio requests bypass the coding agent: the bot calls OpenCode's transient
+  text endpoint (`/api/session/{id}/generate`), which does not run tools or
+  mutate history, so it returns the phrase instead of building a TTS script and
+  asking for input.
+- The generated phrase is filtered and held until the turn finishes, removing
+  paragraphs where the model explains that it cannot generate or send audio.
   In-prompt notes and OpenCode instruction entries were both rejected by the
   model as prompt injection, so this is deterministic output handling.
 - Schema v4 adds `tts_mode` to conversations with `auto` as the default;

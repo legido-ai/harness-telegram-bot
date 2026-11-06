@@ -40,6 +40,12 @@ log = logging.getLogger("bot.runner")
 
 InteractionHook = Callable[[str, Event, "RunState"], Awaitable[None]]
 
+AUDIO_GENERATION_PROMPT = (
+    "The user is asking for an audio reply. Write only the text that should be "
+    "spoken aloud. Do not explain anything, and do not mention audio, TTS, tools "
+    "or capabilities. User request: {request}"
+)
+
 
 @dataclass(slots=True)
 class Job:
@@ -260,24 +266,34 @@ class Runner:
 
         try:
             await editor.start()
-            events = self._bus.subscribe(session_id)
-            try:
-                await self._client.prompt(
+            if audio_requested and speak:
+                # Do not hand an audio request to the coding agent: it reaches
+                # for tools, builds a TTS script and asks for a phrase. Transient
+                # generation returns the words to speak instead.
+                answer = await self._client.generate(
                     session_id,
-                    prompt,
-                    files=job.files,
-                    metadata={
-                        "telegram": {
-                            "chat_id": message.chat_id,
-                            "thread_id": message.thread_id,
-                            "user_id": message.user_id,
-                            "update_id": message.update_id,
-                        }
-                    },
+                    AUDIO_GENERATION_PROMPT.format(request=job.trigger.text),
                 )
-                await self._consume(events, editor, state)
-            finally:
-                self._bus.unsubscribe(session_id)
+                editor.replace(answer)
+            else:
+                events = self._bus.subscribe(session_id)
+                try:
+                    await self._client.prompt(
+                        session_id,
+                        prompt,
+                        files=job.files,
+                        metadata={
+                            "telegram": {
+                                "chat_id": message.chat_id,
+                                "thread_id": message.thread_id,
+                                "user_id": message.user_id,
+                                "update_id": message.update_id,
+                            }
+                        },
+                    )
+                    await self._consume(events, editor, state)
+                finally:
+                    self._bus.unsubscribe(session_id)
 
             if filter_audio_meta:
                 editor.replace(strip_audio_meta(editor.text))

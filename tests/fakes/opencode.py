@@ -23,6 +23,8 @@ class FakeOpenCode:
         self.model_calls: list[tuple[str, str, str]] = []
         self.agent_calls: list[tuple[str, str]] = []
         self.files: list[list[dict[str, str]]] = []
+        self.generated: list[str] = []
+        self.generate_text = '"Small steps still move you forward."'
         self.fail_prompt: int | None = None
         self.publish_on_prompt = True
         self.permission_request: tuple[str, str] | None = None
@@ -127,6 +129,11 @@ class FakeOpenCode:
             if not any(prompt[0] == session_id for prompt in self.prompts):
                 payload = {"id": session_id, "cost": 0, "model": None, "tokens": None}
             return httpx.Response(200, json={"data": payload})
+
+        if path.endswith("/generate") and method == "POST":
+            body = json.loads(request.content or b"{}")
+            self.generated.append(body.get("prompt", ""))
+            return httpx.Response(200, json={"data": {"text": self.generate_text}})
 
         if path.endswith("/prompt") and method == "POST":
             session_id = path.split("/")[3]
