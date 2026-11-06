@@ -22,9 +22,11 @@ needs:
 | Approvals | the first allowlisted human to press Allow/Deny decides; the message records who |
 | Restarts | sessions, bindings, turn history and the dedupe ledger survive in SQLite on a volume |
 | Consumption | every answer ends with `— model · 42K/200K (21%) · $0.03 · 12s`: context used, cost and duration |
+| Voice input | send a voice note or audio file; it is transcribed (Whisper-compatible API) and answered like text |
+| Spoken replies | `/tts all` reads every answer, `/tts auto` only answers to voice messages, `/tts off` is silent |
 
-Deliberately out of scope for 0.1.0: voice, TTS, scheduled tasks, worktree
-switching, skills catalogue, file browser and extra languages.
+Deliberately out of scope for now: scheduled tasks, worktree switching, skills
+catalogue, file browser and extra languages.
 
 ## How it fits together
 
@@ -88,7 +90,7 @@ Full setup, including the group walkthrough: `specs/001-telegram-group-bot/quick
    session; `/sessions` switches, `/new` starts clean.
 
 Useful commands: `/new`, `/sessions`, `/abort`, `/status`, `/model`, `/agent`,
-`/trigger`, `/id`, `/help`.
+`/tts`, `/trigger`, `/id`, `/help`.
 
 ## Running it in a group
 
@@ -109,6 +111,47 @@ Useful commands: `/new`, `/sessions`, `/abort`, `/status`, `/model`, `/agent`,
 Every answer is one message: the reply plus `✅ I'm done` on the last line. The
 pinned card carries model, context usage, cost and queue depth; the keyboard
 carries the current model and `used/limit (percent)`.
+
+## Voice and audio replies
+
+Voice input uses any Whisper-compatible `/audio/transcriptions` endpoint. The
+bot downloads the note, shows `🎤 Recognizing audio…`, posts the transcript and
+then treats it as a normal prompt. In a group, a voice note follows the same
+trigger rules as text (mention, reply to a bot message, or a chat set to
+`/trigger all`).
+
+Audio replies work in three modes, per chat or topic:
+
+```
+/tts off    silence (default)
+/tts all    speak every assistant answer
+/tts auto   speak only answers to voice/audio messages
+```
+
+The old bridge's stack is the recommended one: local whisper.cpp on
+`opencode-stt` plus Edge TTS, which needs no key.
+
+```dotenv
+STT_API_URL=http://opencode-stt:9000/v1
+STT_API_KEY=local
+STT_MODEL=small
+STT_LANGUAGE=es
+STT_REQUEST_FORMAT=multipart
+
+TTS_PROVIDER=edge
+TTS_VOICE=en-US-AriaNeural
+```
+
+`TTS_PROVIDER` also accepts `openai` (any OpenAI-compatible `/audio/speech`
+endpoint, with `TTS_API_URL`/`TTS_API_KEY`/`TTS_MODEL`) and `elevenlabs`
+(`TTS_API_URL`, `TTS_API_KEY`, `TTS_VOICE` is the voice id). Markdown is
+stripped before synthesis, and answers longer than 4000 characters are skipped
+rather than read for minutes.
+
+The Docker sandbox attaches the bot to `box_default` so it can resolve
+`opencode-stt`; on another host point `STT_API_URL` at wherever that service
+runs.
+
 ## Security model
 
 - **Allowlist only.** Unknown users and chats are ignored without side effects;
@@ -140,7 +183,13 @@ See `.env.example` for the full list. The important ones:
 | `OPENCODE_API_URL` | OpenCode V2 server, default `http://127.0.0.1:49374` |
 | `OPENCODE_SERVER_PASSWORD` | server password (`opencode service get password`) |
 | `DATA_DIR` | SQLite, temp attachments; mount a volume here |
-| `MAX_ATTACHMENT_MB` | per-file limit, default 20 |
+| `MAX_ATTACHMENT_MB` | per-file limit, default 20 (also voice/audio) |
+| `STT_API_URL` / `STT_API_KEY` | Whisper-compatible transcription endpoint; empty disables voice input |
+| `STT_MODEL` / `STT_LANGUAGE` | model name and optional language hint (`es`, `en`, …) |
+| `STT_REQUEST_FORMAT` | `multipart` (default) or `json` (base64 `input_audio`) |
+| `TTS_PROVIDER` | `edge` (default here), `openai` or `elevenlabs` |
+| `TTS_API_URL` / `TTS_API_KEY` | only for the HTTP providers; Edge needs no key |
+| `TTS_MODEL` / `TTS_VOICE` | provider voice selection; defaults match each provider |
 
 ## Development
 
@@ -171,6 +220,7 @@ Layout:
 ```text
 app/                service code (config, store, health, main)
 app/opencode/       adapter: HTTP client + SSE consumer
+app/speech/         STT and TTS clients (Whisper API, Edge/OpenAI/ElevenLabs)
 app/telegram/       intake, triggers, identity, streaming, runner, commands
 tests/              unit/, contract/, integration/, fakes/
 specs/001-…/        the specification, plan, contracts and task list
@@ -181,7 +231,6 @@ server and `tests/fakes/telegram.py` records outgoing calls.
 
 ## Roadmap
 
-- Voice prompts and spoken replies (the pieces exist in `agentic-architecture`).
 - Scheduled prompts and reminders.
 - Worktree switching and skills catalogue for multi-repo work.
 - Per-session cost display in `/status`.

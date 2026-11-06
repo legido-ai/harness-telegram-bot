@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
+from io import BytesIO
 from typing import Any
 
-from telegram import Bot, ReplyParameters
+from telegram import Bot, InputFile, ReplyParameters
 from telegram.constants import ChatAction
 from telegram.error import BadRequest
 
@@ -91,6 +92,30 @@ class TelegramMessenger:
             )
         except Exception as exc:  # a typing indicator must never break a run
             log.debug("typing action failed: %s", type(exc).__name__)
+
+    async def send_audio(
+        self,
+        chat_id: int,
+        audio: bytes,
+        *,
+        filename: str = "assistant-reply.mp3",
+        mime_type: str = "audio/mpeg",
+        thread_id: int = 0,
+        reply_to: int | None = None,
+    ) -> int:
+        kwargs: dict[str, Any] = {
+            "chat_id": chat_id,
+            "audio": InputFile(BytesIO(audio), filename=filename),
+            "title": "Assistant reply",
+        }
+        if thread_id:
+            kwargs["message_thread_id"] = thread_id
+        if reply_to:
+            kwargs["reply_parameters"] = ReplyParameters(
+                message_id=reply_to, allow_sending_without_reply=True
+            )
+        message = await self._bot.send_audio(**kwargs)
+        return message.message_id
 
     async def unpin(self, chat_id: int, message_id: int) -> None:
         try:

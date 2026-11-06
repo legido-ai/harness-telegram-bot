@@ -17,6 +17,8 @@ from app.logging import configure_logging
 from app.opencode.client import OpenCodeClient
 from app.opencode.errors import OpenCodeError
 from app.opencode.events import EventBus, consume_events
+from app.speech.stt import SttClient
+from app.speech.tts import TtsClient
 from app.store import Store
 from app.telegram.app import BotApp
 from app.telegram.runner import Runner
@@ -69,9 +71,13 @@ async def run() -> int:
     )
     bus = EventBus()
     state = HealthState()
-    runner = Runner(settings=settings, store=store, client=client, bus=bus)
+    stt = SttClient(settings)
+    tts = TtsClient(settings)
+    runner = Runner(settings=settings, store=store, client=client, bus=bus, tts=tts)
 
-    bot_app = BotApp(settings=settings, store=store, client=client, runner=runner, state=state)
+    bot_app = BotApp(
+        settings=settings, store=store, client=client, runner=runner, state=state, stt=stt
+    )
     runner.set_interaction_hook(bot_app.on_interaction)
 
     application = bot_app.build()

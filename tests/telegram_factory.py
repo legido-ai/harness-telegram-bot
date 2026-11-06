@@ -64,6 +64,45 @@ def update(text: str, *, update_id: int = 1, **kwargs: Any) -> Update:
     )
 
 
+def voice_update(
+    *,
+    update_id: int = 1,
+    caption: str | None = None,
+    caption_entities: list[dict[str, Any]] | None = None,
+    reply_to: dict[str, Any] | None = None,
+    chat_id: int = -100123,
+    chat_type: str = "supergroup",
+    user_id: int = 111,
+    first_name: str = "Ana",
+    message_id: int = 10,
+    thread_id: int | None = None,
+) -> Update:
+    payload = message_payload(
+        text="",
+        chat_id=chat_id,
+        chat_type=chat_type,
+        user_id=user_id,
+        first_name=first_name,
+        message_id=message_id,
+        thread_id=thread_id,
+    )
+    payload.pop("text", None)
+    payload["voice"] = {
+        "file_id": "voice-file-1",
+        "file_unique_id": "voice-unique-1",
+        "duration": 2,
+        "mime_type": "audio/ogg",
+        "file_size": 4096,
+    }
+    if caption is not None:
+        payload["caption"] = caption
+    if caption_entities:
+        payload["caption_entities"] = caption_entities
+    if reply_to:
+        payload["reply_to_message"] = reply_to
+    return Update.de_json({"update_id": update_id, "message": payload}, bot())
+
+
 def callback_update(
     data: str,
     *,

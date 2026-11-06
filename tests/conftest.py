@@ -24,6 +24,7 @@ def settings(tmp_path: Path) -> Settings:
             "OPENCODE_SERVER_PASSWORD": "server-secret-value",
             "DATA_DIR": str(tmp_path / "data"),
             "TELEGRAM_TRIGGER": "mention",
+            "TTS_PROVIDER": "edge",
         }
     )
 

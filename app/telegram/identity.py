@@ -30,10 +30,13 @@ def build_prompt(
     participants: list[str],
     *,
     limit: int = MAX_BLOCK,
+    note: str = "",
 ) -> str:
     """Compose the text handed to the agent for this turn."""
 
     body = trigger.text.strip()
+    if note:
+        body = f"[Note: {note}]\n{body}"
     quote = quoted_block(trigger.quote)
 
     for truncation in (1500, 800, 400, 0):

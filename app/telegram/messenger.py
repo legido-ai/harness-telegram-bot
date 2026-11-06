@@ -38,3 +38,14 @@ class Messenger(Protocol):
     async def delete_message(self, chat_id: int, message_id: int) -> None: ...
 
     async def send_typing(self, chat_id: int, thread_id: int = 0) -> None: ...
+
+    async def send_audio(
+        self,
+        chat_id: int,
+        audio: bytes,
+        *,
+        filename: str = "assistant-reply.mp3",
+        mime_type: str = "audio/mpeg",
+        thread_id: int = 0,
+        reply_to: int | None = None,
+    ) -> int: ...

@@ -19,6 +19,7 @@ The two buttons below the input: model picker and context usage.
 /status         session, model, agent and queue depth
 /model          pick the model for this conversation
 /agent          pick the agent mode
+/tts            audio replies: off|all|auto
 /trigger        show or set mention|all for this chat
 /id             show your numeric id and this chat id
 /help           this card

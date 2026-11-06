@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
@@ -23,6 +24,7 @@ from app.opencode.events import (
     Event,
     EventBus,
 )
+from app.speech.tts import MAX_INPUT_CHARS, TtsClient, TtsError
 from app.store import Store
 from app.telegram.dashboard import dashboard_text
 from app.telegram.footer import RunStats, format_cost, format_tokens
@@ -44,6 +46,7 @@ class Job:
     trigger: Trigger
     files: list[dict[str, str]] | None = None
     turn_id: int = 0
+    prompt_note: str = ""
 
 
 @dataclass(slots=True)
@@ -65,6 +68,7 @@ class Runner:
         messenger: Messenger | None = None,
         on_interaction: InteractionHook | None = None,
         run_timeout: float = 900.0,
+        tts: TtsClient | None = None,
     ) -> None:
         self._settings = settings
         self._store = store
@@ -73,6 +77,7 @@ class Runner:
         self.messenger: Messenger | None = messenger
         self._on_interaction = on_interaction
         self._run_timeout = run_timeout
+        self._tts = tts
         self._queues: dict[tuple[int, int], asyncio.Queue[Job]] = {}
         self._workers: dict[tuple[int, int], asyncio.Task[None]] = {}
         self._active_session: dict[tuple[int, int], str] = {}
@@ -181,7 +186,7 @@ class Runner:
             message.chat_id, message.thread_id, message.chat_type, message.chat_title
         )
         participants = self._store.roster()
-        prompt = build_prompt(message, job.trigger, participants)
+        prompt = build_prompt(message, job.trigger, participants, note=job.prompt_note)
 
         session_id = conversation.active_session_id
         created = False
@@ -211,13 +216,14 @@ class Runner:
             turn_id=turn_id,
         )
 
+        prefix = attribution_prefix(message, len(participants))
         editor = StreamEditor(
             self.messenger.send_text,
             self.messenger.edit_text,
             message.chat_id,
             thread_id=message.thread_id,
             reply_to=message.message_id if message.is_private else None,
-            prefix=attribution_prefix(message, len(participants)),
+            prefix=prefix,
             markdown=True,
         )
 
@@ -278,6 +284,7 @@ class Runner:
                 editor.append(f"{separator}{done}")
             await editor.finish()
             await self._refresh_dashboard(message, stats, status)
+            await self._maybe_speak(message, editor.text, prefix)
         except SessionGone:
             self._store.clear_session(message.chat_id, message.thread_id)
             status, error_kind = "failed", "session_gone"
@@ -321,6 +328,42 @@ class Runner:
                 await asyncio.wait_for(stop.wait(), timeout=4.0)
             except TimeoutError:
                 continue
+
+    async def _maybe_speak(self, message: Inbound, answer: str, prefix: str) -> None:
+        """Send a spoken version of the finished answer when the chat asks for it."""
+
+        if self._tts is None or self.messenger is None or not self._tts.available:
+            return
+        conversation = self._store.get_conversation(message.chat_id, message.thread_id)
+        mode = conversation.tts_mode if conversation else "off"
+        if mode == "off" or (mode == "auto" and not message.voice_input):
+            return
+
+        spoken = re.sub(r"\n*✅ I'm done\s*$", "", answer.strip()).strip()
+        if prefix and spoken.startswith(prefix):
+            spoken = spoken[len(prefix) :].strip()
+        if not spoken:
+            return
+        if len(spoken) > MAX_INPUT_CHARS:
+            log.info("audio reply skipped: answer too long")
+            return
+
+        try:
+            speech = await self._tts.synthesize(spoken)
+            await self.messenger.send_audio(
+                message.chat_id,
+                speech.data,
+                filename=speech.filename,
+                mime_type=speech.mime_type,
+                thread_id=message.thread_id,
+            )
+        except TtsError:
+            log.info("audio reply skipped", extra={"chat_id": message.chat_id})
+            await self.messenger.send_text(
+                message.chat_id, "⚠️ Failed to generate the audio reply.", thread_id=message.thread_id
+            )
+        except Exception as exc:  # a failed voice note must never fail the turn
+            log.warning("audio reply delivery failed: %s", type(exc).__name__)
 
     async def _consume(
         self, events: asyncio.Queue[Event], editor: StreamEditor, state: RunState
@@ -568,6 +611,7 @@ class Runner:
         model = conversation.model if conversation else None
         model_text = f"{model['providerID']}/{model['modelID']}" if model else "server default"
         agent = conversation.agent if conversation else None
+        tts_mode = conversation.tts_mode if conversation else "off"
         depth = self.queue_depth(message.key)
         return (
             f"conversation: {message.chat_type} {message.chat_id}"
@@ -575,6 +619,7 @@ class Runner:
             + f"\nsession: {session or 'none yet'}"
             + f"\nmodel: {model_text}"
             + f"\nagent: {agent or 'server default'}"
+            + f"\naudio replies: {tts_mode}"
             + f"\nqueued: {depth}"
         )
 

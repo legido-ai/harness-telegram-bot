@@ -25,6 +25,7 @@ OWN_COMMANDS = frozenset(
         "context",
         "model",
         "agent",
+        "tts",
         "trigger",
     }
 )

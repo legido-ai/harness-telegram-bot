@@ -3,6 +3,35 @@
 All notable changes to this project are documented here. Format follows
 Keep a Changelog; versions use semantic versioning.
 
+## [0.2.0] — 2026-11-06
+
+Voice notes and spoken replies, matching the bridge currently running in OC2
+(`@grinev/opencode-telegram-bot`): local Whisper STT plus Edge TTS.
+
+### Added
+
+- Voice/audio intake: download the note, transcribe it through a
+  Whisper-compatible API (multipart or JSON `input_audio`), post
+  `🎤 Recognized: …`, then answer it through the normal prompt path. The
+  transcript keeps speaker attribution and quoted context.
+- Group trigger parity for voice: a voice note needs a mention, a reply to the
+  bot, or `/trigger all`; a caption-less note stays silent otherwise.
+- `/tts off|all|auto` per chat/topic. `auto` reads only answers to voice notes.
+  Spoken replies are sent as an audio file after the text answer; synthesis
+  failures never lose the answer.
+- TTS providers: Microsoft Edge Read Aloud (no key, default), OpenAI-compatible
+  `/audio/speech`, and ElevenLabs. Markdown is stripped and answers over 4000
+  characters are skipped.
+- `/status` now reports `audio replies: <mode>`.
+- Schema v3 adds `tts_mode` to conversations; existing databases migrate in
+  place.
+
+### Changed
+
+- `deploy/sandbox-compose.yml` joins `box_default` and points at
+  `http://opencode-stt:9000/v1` with `TTS_PROVIDER=edge`, matching OC2.
+- Version bumped to 0.2.0; new dependency `edge-tts==7.3.1`.
+
 ## [0.1.1] — 2026-11-05
 
 Validated end to end in a real Telegram group (two allowlisted humans + bot,

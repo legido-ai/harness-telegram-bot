@@ -17,6 +17,17 @@ class Sent:
 
 
 @dataclass
+class SentAudio:
+    chat_id: int
+    data: bytes
+    filename: str
+    mime_type: str
+    thread_id: int = 0
+    reply_to: int | None = None
+    message_id: int = 0
+
+
+@dataclass
 class Edited:
     chat_id: int
     message_id: int
@@ -34,6 +45,7 @@ class FakeMessenger:
     unpinned_all: list[int] = field(default_factory=list)
     deleted: list[tuple[int, int]] = field(default_factory=list)
     typing: list[tuple[int, int]] = field(default_factory=list)
+    audio: list[SentAudio] = field(default_factory=list)
     _next_id: int = 100
 
     async def send_text(
@@ -75,6 +87,30 @@ class FakeMessenger:
 
     async def send_typing(self, chat_id: int, thread_id: int = 0) -> None:
         self.typing.append((chat_id, thread_id))
+
+    async def send_audio(
+        self,
+        chat_id: int,
+        audio: bytes,
+        *,
+        filename: str = "assistant-reply.mp3",
+        mime_type: str = "audio/mpeg",
+        thread_id: int = 0,
+        reply_to: int | None = None,
+    ) -> int:
+        self._next_id += 1
+        self.audio.append(
+            SentAudio(
+                chat_id=chat_id,
+                data=audio,
+                filename=filename,
+                mime_type=mime_type,
+                thread_id=thread_id,
+                reply_to=reply_to,
+                message_id=self._next_id,
+            )
+        )
+        return self._next_id
 
     async def pin(self, chat_id: int, message_id: int) -> bool:
         self.pinned.append((chat_id, message_id))

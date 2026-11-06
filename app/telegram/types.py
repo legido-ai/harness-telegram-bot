@@ -40,6 +40,7 @@ class Inbound:
     callback_id: str | None = None
     callback_data: str | None = None
     thread_title: str | None = None
+    voice_input: bool = False
 
     @property
     def is_private(self) -> bool:

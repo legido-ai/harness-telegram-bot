@@ -1,7 +1,7 @@
 services:
   bot:
     build: .
-    image: ghcr.io/legido-ai/opencode-telegram-bot:0.1.1
+    image: ghcr.io/legido-ai/opencode-telegram-bot:0.2.0
     container_name: opencode-telegram-bot
     env_file:
       - .env

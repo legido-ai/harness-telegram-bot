@@ -8,6 +8,7 @@ behaviour testable without a live bot.
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from typing import Any
 
 from telegram import Update
@@ -25,8 +26,9 @@ from app.health import HealthState
 from app.opencode.client import PERMISSION_DECISIONS, OpenCodeClient
 from app.opencode.errors import OpenCodeError
 from app.opencode.events import FORM_CREATED, PERMISSION_ASKED, Event
-from app.store import Store
-from app.telegram import commands, keyboards
+from app.speech.stt import SttClient, SttError
+from app.store import TTS_MODES, Store
+from app.telegram import commands, keyboards, voice
 from app.telegram.attachments import AttachmentError, collect
 from app.telegram.auth import Authorizer
 from app.telegram.convert import from_update
@@ -34,7 +36,7 @@ from app.telegram.messenger import Messenger
 from app.telegram.ptb_messenger import TelegramMessenger
 from app.telegram.runner import Job, Runner, RunState
 from app.telegram.trigger import detect
-from app.telegram.types import Inbound
+from app.telegram.types import Inbound, Trigger
 
 log = logging.getLogger("bot.app")
 
@@ -49,12 +51,14 @@ class BotApp:
         runner: Runner,
         state: HealthState,
         messenger: Messenger | None = None,
+        stt: SttClient | None = None,
     ) -> None:
         self.settings = settings
         self.store = store
         self.client = client
         self.runner = runner
         self.state = state
+        self.stt = stt
         self.authorizer = Authorizer(settings, store)
         # Telegram caps callback_data at 64 bytes; a short token keeps menus
         # usable without embedding session ids and model names in every button.
@@ -84,6 +88,12 @@ class BotApp:
         # Registered first, so every delivered update is visible in the log even
         # when the intake path drops it.
         application.add_handler(TypeHandler(Update, self.on_any_update), group=-1)
+        # Voice and audio are transcribed before they reach the normal prompt
+        # path; register them first so the ALL handler never sees them as an
+        # empty text request.
+        application.add_handler(
+            MessageHandler(filters.VOICE | filters.AUDIO, self.on_voice)
+        )
         application.add_handler(MessageHandler(filters.ALL, self.on_message))
         application.add_handler(CallbackQueryHandler(self.on_callback))
         application.add_error_handler(self.on_error)
@@ -138,6 +148,9 @@ class BotApp:
             return
         if message.is_bot:
             log.debug("ignoring message from a bot")
+            return
+        if message.voice_input:
+            # Handled by on_voice, which must transcribe before submitting.
             return
         log.info(
             "update received",
@@ -208,6 +221,92 @@ class BotApp:
             return
 
         await self.runner.submit(Job(message=message, trigger=trigger, files=files or None))
+
+    async def on_voice(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Transcribe a voice note, then run it through the normal prompt path."""
+
+        message = self._inbound(update)
+        if message is None or message.is_bot:
+            return
+        if not self.authorizer.allow(message):
+            return
+        if not self.store.mark_seen(message.update_id):
+            log.debug("duplicate update ignored", extra={"update_id": message.update_id})
+            return
+
+        self.state.note_update()
+        self.authorizer.register(message)
+        log.info(
+            "voice update received",
+            extra={"update_id": message.update_id, "chat_id": message.chat_id},
+        )
+
+        conversation = self.store.touch_conversation(
+            message.chat_id, message.thread_id, message.chat_type, message.chat_title
+        )
+        policy = conversation.trigger_policy or self.settings.trigger
+        trigger = detect(
+            message,
+            bot_id=self.bot_id,
+            bot_username=self.bot_username,
+            policy=policy,
+        )
+        if trigger is None:
+            # A caption-less voice note still counts as a request when the chat
+            # is in "answer everything" mode; otherwise it is a private thought.
+            if policy != "all" or message.is_private:
+                return
+            trigger = Trigger(kind="policy_all", text="", quote=message.quote)
+
+        if trigger.kind == "command":
+            await self._handle_command(message, trigger.text)
+            return
+
+        if self.stt is None or not self.stt.available:
+            await self._reply(
+                message,
+                "🎤 Voice recognition is not configured.\n\n"
+                "Set STT_API_URL and STT_API_KEY to enable it.",
+            )
+            return
+
+        status_id = await self._reply(message, "🎤 Recognizing audio…")
+        try:
+            assert context.bot is not None
+            audio, filename = await voice.download(
+                context.bot, update.effective_message, self.settings
+            )
+            transcript = await self.stt.transcribe(audio, filename)
+        except SttError as exc:
+            await self._finish_transcription(message, status_id, f"🔴 Failed to recognize audio: {exc.user_message}")
+            return
+        except voice.VoiceError as exc:
+            await self._finish_transcription(message, status_id, f"🔴 {exc.user_message}")
+            return
+
+        await self._finish_transcription(message, status_id, f"🎤 Recognized:\n{transcript}")
+
+        recognized = replace(message, text=transcript, entities=(), voice_input=True)
+        prompt_trigger = Trigger(kind=trigger.kind, text=transcript, quote=message.quote)
+        note = self.settings.stt_note_prompt
+        if note.lower() in ("false", "0"):
+            note = ""
+        await self.runner.submit(
+            Job(message=recognized, trigger=prompt_trigger, prompt_note=note)
+        )
+
+    async def _finish_transcription(
+        self, message: Inbound, status_id: int | None, text: str
+    ) -> None:
+        if status_id is None:
+            await self._reply(message, text)
+            return
+        try:
+            assert self.messenger is not None
+            await self.messenger.edit_text(message.chat_id, status_id, text)
+        except Exception:
+            log.debug("could not edit the transcription status message")
+            await self._reply(message, text)
 
     # -- commands --------------------------------------------------------
 
@@ -293,6 +392,35 @@ class BotApp:
             return
         self.store.set_trigger_policy(message.chat_id, message.thread_id, policy)
         await self._reply(message, f"trigger policy set to {policy}")
+
+    async def _cmd_tts(self, message: Inbound, argument: str) -> None:
+        conversation = self.store.touch_conversation(
+            message.chat_id, message.thread_id, message.chat_type, message.chat_title
+        )
+        current = conversation.tts_mode if conversation else "off"
+        mode = argument.strip().lower()
+        if not mode:
+            await self._reply(
+                message,
+                f"audio replies: {current}\nUse /tts off, /tts all or /tts auto.",
+            )
+            return
+        if mode not in TTS_MODES:
+            await self._reply(message, "Audio replies must be off, all or auto.")
+            return
+        if mode != "off" and not self.settings.tts_configured:
+            await self._reply(
+                message,
+                "⚠️ Audio replies are unavailable. Set TTS_API_URL and TTS_API_KEY first.",
+            )
+            return
+        self.store.set_tts_mode(message.chat_id, message.thread_id, mode)
+        copy = {
+            "off": "🔇 Audio replies disabled.",
+            "all": "🔊 Audio replies enabled for all messages.",
+            "auto": "🎤 Audio replies enabled for voice/audio messages only.",
+        }
+        await self._reply(message, copy[mode])
 
     async def _cmd_sessions(self, message: Inbound, argument: str) -> None:
         bindings = self.store.list_bindings(message.chat_id, message.thread_id, limit=10)

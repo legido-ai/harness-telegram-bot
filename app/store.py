@@ -15,7 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
+TTS_MODES = ("off", "all", "auto")
 
 DDL = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -29,6 +30,7 @@ CREATE TABLE IF NOT EXISTS conversations (
     kind              TEXT NOT NULL,
     title             TEXT,
     trigger_policy    TEXT NOT NULL DEFAULT 'mention',
+    tts_mode          TEXT NOT NULL DEFAULT 'off',
     model_json        TEXT,
     agent             TEXT,
     active_session_id TEXT,
@@ -103,6 +105,7 @@ class Conversation:
     kind: str
     title: str | None
     trigger_policy: str
+    tts_mode: str
     model_json: str | None
     agent: str | None
     active_session_id: str | None
@@ -183,6 +186,15 @@ class Store:
                     self._conn.execute(
                         "ALTER TABLE conversations ADD COLUMN pinned_message_id INTEGER"
                     )
+            if current < 3:
+                columns = {
+                    row["name"]
+                    for row in self._conn.execute("PRAGMA table_info(conversations)").fetchall()
+                }
+                if "tts_mode" not in columns:
+                    self._conn.execute(
+                        "ALTER TABLE conversations ADD COLUMN tts_mode TEXT NOT NULL DEFAULT 'off'"
+                    )
             if current < SCHEMA_VERSION:
                 self._conn.execute(
                     "INSERT OR REPLACE INTO meta(key, value) VALUES('schema_version', ?)",
@@ -254,13 +266,14 @@ class Store:
             kind=row["kind"],
             title=row["title"],
             trigger_policy=row["trigger_policy"],
+            tts_mode=row["tts_mode"],
             model_json=row["model_json"],
             agent=row["agent"],
             active_session_id=row["active_session_id"],
         )
 
     def _set_column(self, chat_id: int, thread_id: int, column: str, value: Any) -> None:
-        allowed = {"trigger_policy", "model_json", "agent", "active_session_id", "title"}
+        allowed = {"trigger_policy", "tts_mode", "model_json", "agent", "active_session_id", "title"}
         if column not in allowed:
             raise ValueError(f"column not settable: {column}")
         with self._conn:
@@ -288,6 +301,11 @@ class Store:
         if policy not in ("mention", "all"):
             raise ValueError("invalid trigger policy")
         self._set_column(chat_id, thread_id, "trigger_policy", policy)
+
+    def set_tts_mode(self, chat_id: int, thread_id: int, mode: str) -> None:
+        if mode not in TTS_MODES:
+            raise ValueError("invalid tts mode")
+        self._set_column(chat_id, thread_id, "tts_mode", mode)
 
     def set_model(self, chat_id: int, thread_id: int, model: dict[str, str] | None) -> None:
         self._set_column(chat_id, thread_id, "model_json", json.dumps(model) if model else None)

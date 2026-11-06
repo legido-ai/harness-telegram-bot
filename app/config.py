@@ -9,6 +9,8 @@ from pathlib import Path
 
 TRIGGER_POLICIES = ("mention", "all")
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
+STT_REQUEST_FORMATS = ("multipart", "json")
+TTS_PROVIDERS = ("edge", "openai", "elevenlabs")
 
 
 class ConfigError(RuntimeError):
@@ -45,6 +47,17 @@ class Settings:
     health_port: int
     max_attachment_mb: int
     log_level: str
+    stt_url: str
+    stt_api_key: str
+    stt_model: str
+    stt_language: str
+    stt_request_format: str
+    stt_note_prompt: str
+    tts_provider: str
+    tts_url: str
+    tts_api_key: str
+    tts_model: str
+    tts_voice: str
 
     @property
     def db_path(self) -> Path:
@@ -58,7 +71,17 @@ class Settings:
     def secrets(self) -> tuple[str, ...]:
         """Values that must never appear in logs, errors or health payloads."""
 
-        return (self.bot_token, self.opencode_password)
+        return (self.bot_token, self.opencode_password, self.stt_api_key, self.tts_api_key)
+
+    @property
+    def stt_configured(self) -> bool:
+        return bool(self.stt_url and self.stt_api_key)
+
+    @property
+    def tts_configured(self) -> bool:
+        if self.tts_provider == "edge":
+            return True
+        return bool(self.tts_url and self.tts_api_key)
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -96,6 +119,22 @@ class Settings:
         if max_mb <= 0 or max_mb > 50:
             raise ConfigError("MAX_ATTACHMENT_MB must be between 1 and 50")
 
+        request_format = (env.get("STT_REQUEST_FORMAT") or "multipart").strip().lower()
+        if request_format not in STT_REQUEST_FORMATS:
+            raise ConfigError(
+                "STT_REQUEST_FORMAT must be one of: " + ", ".join(STT_REQUEST_FORMATS)
+            )
+
+        provider = (env.get("TTS_PROVIDER") or "openai").strip().lower()
+        if provider not in TTS_PROVIDERS:
+            raise ConfigError("TTS_PROVIDER must be one of: " + ", ".join(TTS_PROVIDERS))
+
+        default_voice = {
+            "edge": "en-US-EmmaMultilingualNeural",
+            "elevenlabs": "21m00Tcm4TlvDq8ikWAM",
+        }.get(provider, "alloy")
+        default_model = "eleven_flash_v2_5" if provider == "elevenlabs" else "gpt-4o-mini-tts"
+
         return cls(
             bot_token=env["TELEGRAM_BOT_TOKEN"].strip(),
             allowed_user_ids=users,
@@ -109,6 +148,17 @@ class Settings:
             health_port=port,
             max_attachment_mb=max_mb,
             log_level=level,
+            stt_url=(env.get("STT_API_URL") or "").strip().rstrip("/"),
+            stt_api_key=(env.get("STT_API_KEY") or "").strip(),
+            stt_model=(env.get("STT_MODEL") or "whisper-large-v3-turbo").strip(),
+            stt_language=(env.get("STT_LANGUAGE") or "").strip(),
+            stt_request_format=request_format,
+            stt_note_prompt=(env.get("STT_NOTE_PROMPT") or "").strip(),
+            tts_provider=provider,
+            tts_url=(env.get("TTS_API_URL") or "").strip().rstrip("/"),
+            tts_api_key=(env.get("TTS_API_KEY") or "").strip(),
+            tts_model=(env.get("TTS_MODEL") or default_model).strip(),
+            tts_voice=(env.get("TTS_VOICE") or default_voice).strip(),
         )
 
     def is_user_allowed(self, user_id: int) -> bool:

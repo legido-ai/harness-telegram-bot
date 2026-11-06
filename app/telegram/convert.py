@@ -17,7 +17,10 @@ def _display_name(message: Message) -> str:
 
 def _entities(message: Message) -> tuple[Entity, ...]:
     result: list[Entity] = []
-    for entity in message.entities or ():
+    # Captions carry their own entity list; a voice note with "@bot" in its
+    # caption must trigger exactly like a text message would.
+    entities = message.entities or getattr(message, "caption_entities", None) or ()
+    for entity in entities:
         user_id = entity.user.id if getattr(entity, "user", None) is not None else None
         result.append(
             Entity(type=str(entity.type), offset=entity.offset, length=entity.length, user_id=user_id)
@@ -91,6 +94,7 @@ def from_update(update: Update, bot_id: int) -> Inbound | None:
         text=message.text or message.caption or "",
         entities=_entities(message),
         quote=_quoted(message),
+        voice_input=message.voice is not None or message.audio is not None,
     )
 
 
