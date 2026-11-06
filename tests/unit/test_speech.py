@@ -166,3 +166,18 @@ async def test_edge_tts_uses_the_injected_synthesizer(settings) -> None:
     speech = await client.synthesize("plain text")
     assert speech.data == b"edge-mp3"
     assert calls == [("plain text", "en-US-AriaNeural")]
+
+
+async def test_edge_tts_accepts_a_per_call_voice(settings) -> None:
+    calls: list[tuple[str, str]] = []
+
+    async def synth(text: str, voice: str) -> bytes:
+        calls.append((text, voice))
+        return b"edge-mp3"
+
+    client = TtsClient(
+        replace(settings, tts_provider="edge", tts_voice="es-ES-ElviraNeural"),
+        edge_synthesizer=synth,
+    )
+    await client.synthesize("hello", voice="en-US-AriaNeural")
+    assert calls == [("hello", "en-US-AriaNeural")]

@@ -23,6 +23,11 @@ Voice notes and spoken replies, matching the bridge currently running in OC2
 - TTS providers: Microsoft Edge Read Aloud (no key, default), OpenAI-compatible
   `/audio/speech`, and ElevenLabs. Markdown is stripped and answers over 4000
   characters are skipped.
+- Two voice settings: `TTS_VOICE` for normal replies (default: Spanish
+  `es-ES-ElviraNeural`) and `TTS_VOICE_AUDIO` for explicit audio requests
+  (default: English `en-US-AriaNeural`). The explicit-audio text is generated in
+  English so voice and language match; `TTS_VOICE_AUDIO` falls back to
+  `TTS_VOICE` when unset.
 - `/status` now reports `audio replies: <mode>`.
 - Audio requests bypass the coding agent: the bot calls OpenCode's transient
   text endpoint (`/api/session/{id}/generate`), which does not run tools or

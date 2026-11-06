@@ -28,13 +28,15 @@ class FakeTts:
         self.data = data
         self.error = error
         self.texts: list[str] = []
+        self.voices: list[str | None] = []
 
     @property
     def available(self) -> bool:
         return True
 
-    async def synthesize(self, text: str) -> Speech:
+    async def synthesize(self, text: str, *, voice: str | None = None) -> Speech:
         self.texts.append(text)
+        self.voices.append(voice)
         if self.error is not None:
             raise self.error
         return Speech(data=self.data)

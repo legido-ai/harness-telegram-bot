@@ -25,6 +25,8 @@ def settings(tmp_path: Path) -> Settings:
             "DATA_DIR": str(tmp_path / "data"),
             "TELEGRAM_TRIGGER": "mention",
             "TTS_PROVIDER": "edge",
+            "TTS_VOICE": "es-ES-ElviraNeural",
+            "TTS_VOICE_AUDIO": "en-US-AriaNeural",
         }
     )
 

@@ -58,6 +58,7 @@ class Settings:
     tts_api_key: str
     tts_model: str
     tts_voice: str
+    tts_voice_audio: str
 
     @property
     def db_path(self) -> Path:
@@ -159,6 +160,11 @@ class Settings:
             tts_api_key=(env.get("TTS_API_KEY") or "").strip(),
             tts_model=(env.get("TTS_MODEL") or default_model).strip(),
             tts_voice=(env.get("TTS_VOICE") or default_voice).strip(),
+            # Explicit "generate an audio" requests are rare and use a separate
+            # voice; fall back to the default so one variable still works.
+            tts_voice_audio=(
+                env.get("TTS_VOICE_AUDIO") or env.get("TTS_VOICE") or default_voice
+            ).strip(),
         )
 
     def is_user_allowed(self, user_id: int) -> bool:

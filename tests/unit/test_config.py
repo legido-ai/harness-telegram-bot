@@ -94,6 +94,24 @@ def test_parses_stt_and_tts_settings(tmp_path) -> None:
     assert "stt-secret" in settings.secrets
 
 
+def test_default_and_explicit_audio_voices_are_separate(tmp_path) -> None:
+    base = {
+        "TELEGRAM_BOT_TOKEN": "123456:TESTTOKENVALUE",
+        "TELEGRAM_ALLOWED_USER_IDS": "111",
+        "OPENCODE_SERVER_PASSWORD": "server-secret-value",
+        "DATA_DIR": str(tmp_path),
+        "TTS_PROVIDER": "edge",
+        "TTS_VOICE": "es-ES-ElviraNeural",
+        "TTS_VOICE_AUDIO": "en-US-AriaNeural",
+    }
+    settings = Settings.from_env(base)
+    assert settings.tts_voice == "es-ES-ElviraNeural"
+    assert settings.tts_voice_audio == "en-US-AriaNeural"
+
+    fallback = Settings.from_env({**base, "TTS_VOICE_AUDIO": ""})
+    assert fallback.tts_voice_audio == "es-ES-ElviraNeural"
+
+
 def test_rejects_bad_speech_settings(tmp_path) -> None:
     base = {
         "TELEGRAM_BOT_TOKEN": "123456:TESTTOKENVALUE",

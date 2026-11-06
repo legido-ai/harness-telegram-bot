@@ -39,7 +39,10 @@ services:
       STT_LANGUAGE: es
       STT_REQUEST_FORMAT: multipart
       TTS_PROVIDER: edge
-      TTS_VOICE: en-US-AriaNeural
+      # Normal replies speak in the user's language/voice.
+      TTS_VOICE: es-ES-ElviraNeural
+      # Explicit "generate an audio" requests are generated in English.
+      TTS_VOICE_AUDIO: en-US-AriaNeural
     networks:
       - default
       - box

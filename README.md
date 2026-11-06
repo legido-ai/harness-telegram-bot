@@ -146,8 +146,14 @@ STT_LANGUAGE=es
 STT_REQUEST_FORMAT=multipart
 
 TTS_PROVIDER=edge
-TTS_VOICE=en-US-AriaNeural
+TTS_VOICE=es-ES-ElviraNeural        # normal replies: Spanish
+TTS_VOICE_AUDIO=en-US-AriaNeural    # explicit "generate an audio": English
 ```
+
+There are two voices: `TTS_VOICE` is the default for normal replies, and
+`TTS_VOICE_AUDIO` is used when the user explicitly asks the bot to generate an
+audio. The explicit-audio path generates its text in English and uses the second
+voice; it falls back to `TTS_VOICE` when `TTS_VOICE_AUDIO` is empty.
 
 `TTS_PROVIDER` also accepts `openai` (any OpenAI-compatible `/audio/speech`
 endpoint, with `TTS_API_URL`/`TTS_API_KEY`/`TTS_MODEL`) and `elevenlabs`
@@ -196,7 +202,8 @@ See `.env.example` for the full list. The important ones:
 | `STT_REQUEST_FORMAT` | `multipart` (default) or `json` (base64 `input_audio`) |
 | `TTS_PROVIDER` | `edge` (default here), `openai` or `elevenlabs` |
 | `TTS_API_URL` / `TTS_API_KEY` | only for the HTTP providers; Edge needs no key |
-| `TTS_MODEL` / `TTS_VOICE` | provider voice selection; defaults match each provider |
+| `TTS_MODEL` / `TTS_VOICE` | provider model and default voice for normal replies |
+| `TTS_VOICE_AUDIO` | voice for explicit audio-generation requests; defaults to `TTS_VOICE` |
 
 ## Development
 

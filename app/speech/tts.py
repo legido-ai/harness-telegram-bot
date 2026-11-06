@@ -90,7 +90,7 @@ class TtsClient:
     def available(self) -> bool:
         return self._settings.tts_configured
 
-    async def synthesize(self, text: str) -> Speech:
+    async def synthesize(self, text: str, *, voice: str | None = None) -> Speech:
         if not self.available:
             raise TtsNotConfigured()
         spoken = strip_markdown_for_speech(text)
@@ -99,13 +99,14 @@ class TtsClient:
         if len(spoken) > MAX_INPUT_CHARS:
             raise TtsFailed("the answer is too long to read aloud")
 
+        chosen = voice or self._settings.tts_voice
         try:
             if self._settings.tts_provider == "edge":
-                audio = await self._synthesize_edge(spoken)
+                audio = await self._synthesize_edge(spoken, chosen)
             elif self._settings.tts_provider == "elevenlabs":
-                audio = await self._synthesize_elevenlabs(spoken)
+                audio = await self._synthesize_elevenlabs(spoken, chosen)
             else:
-                audio = await self._synthesize_openai(spoken)
+                audio = await self._synthesize_openai(spoken, chosen)
         except TtsError:
             raise
         except TimeoutError as exc:
@@ -119,14 +120,14 @@ class TtsClient:
         log.info("generated speech", extra={"event": f"{len(audio)} bytes"})
         return Speech(data=audio)
 
-    async def _synthesize_edge(self, text: str) -> bytes:
+    async def _synthesize_edge(self, text: str, voice: str) -> bytes:
         if self._edge_synthesizer is not None:
-            return await self._edge_synthesizer(text, self._settings.tts_voice)  # type: ignore[operator]
+            return await self._edge_synthesizer(text, voice)  # type: ignore[operator]
 
         import edge_tts
 
         async def collect() -> bytes:
-            communicate = edge_tts.Communicate(text, self._settings.tts_voice or EDGE_DEFAULT_VOICE)
+            communicate = edge_tts.Communicate(text, voice or EDGE_DEFAULT_VOICE)
             chunks = bytearray()
             async for chunk in communicate.stream():
                 if chunk.get("type") == "audio":
@@ -136,7 +137,7 @@ class TtsClient:
         async with asyncio.timeout(TIMEOUT_SECONDS):
             return await collect()
 
-    async def _synthesize_openai(self, text: str) -> bytes:
+    async def _synthesize_openai(self, text: str, voice: str) -> bytes:
         async with httpx.AsyncClient(
             transport=self._transport, timeout=httpx.Timeout(TIMEOUT_SECONDS, connect=10.0)
         ) as client:
@@ -148,7 +149,7 @@ class TtsClient:
                 },
                 json={
                     "model": self._settings.tts_model,
-                    "voice": self._settings.tts_voice,
+                    "voice": voice,
                     "input": text,
                     "response_format": "mp3",
                 },
@@ -158,8 +159,8 @@ class TtsClient:
             raise TtsFailed()
         return response.content
 
-    async def _synthesize_elevenlabs(self, text: str) -> bytes:
-        voice = self._settings.tts_voice or "21m00Tcm4TlvDq8ikWAM"
+    async def _synthesize_elevenlabs(self, text: str, voice: str) -> bytes:
+        voice = voice or "21m00Tcm4TlvDq8ikWAM"
         async with httpx.AsyncClient(
             transport=self._transport, timeout=httpx.Timeout(TIMEOUT_SECONDS, connect=10.0)
         ) as client:

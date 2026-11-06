@@ -141,6 +141,7 @@ async def test_tts_modes_control_audio_replies(
     await wait_for(lambda: bool(messenger.audio))
 
     assert tts.texts == ["Hello from the agent"]
+    assert tts.voices == [None]
     assert messenger.audio[0].chat_id == 111
     assert messenger.audio[0].data == b"ID3fake-mp3"
 
@@ -168,6 +169,7 @@ async def test_voice_reply_is_spoken_by_default(
 
     await wait_for(lambda: bool(messenger.audio))
     assert tts.texts == ["Hello from the agent"]
+    assert tts.voices == [None]
     assert fake_server.prompts
 
 
@@ -191,6 +193,7 @@ async def test_audio_request_generates_the_phrase_instead_of_using_tools(
 
     await wait_for(lambda: bool(messenger.audio))
     assert tts.texts == ['"Small steps still move you forward."']
+    assert tts.voices == ["en-US-AriaNeural"]
     assert fake_server.prompts == []
     assert fake_server.generated
     assert "genera un audio corto con una frase" in fake_server.generated[0]

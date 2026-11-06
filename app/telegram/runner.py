@@ -42,8 +42,11 @@ InteractionHook = Callable[[str, Event, "RunState"], Awaitable[None]]
 
 AUDIO_GENERATION_PROMPT = (
     "The user is asking for an audio reply. Write only the text that should be "
-    "spoken aloud. Do not explain anything, and do not mention audio, TTS, tools "
-    "or capabilities. User request: {request}"
+    "spoken aloud. IMPORTANT: the text must be in English, even when the user's "
+    "request is in Spanish. Keep it to one or two sentences. If no text is provided, "
+    "invent a short, self-contained English message. Never ask the user for the "
+    "sentence; produce it. Do not explain anything and do not mention audio, TTS, "
+    "tools or capabilities. User request: {request}"
 )
 
 
@@ -270,10 +273,7 @@ class Runner:
                 # Do not hand an audio request to the coding agent: it reaches
                 # for tools, builds a TTS script and asks for a phrase. Transient
                 # generation returns the words to speak instead.
-                answer = await self._client.generate(
-                    session_id,
-                    AUDIO_GENERATION_PROMPT.format(request=job.trigger.text),
-                )
+                answer = await self._generate_audio_text(session_id, job.trigger.text)
                 editor.replace(answer)
             else:
                 events = self._bus.subscribe(session_id)
@@ -318,7 +318,13 @@ class Runner:
                 editor.append(f"{separator}{done}")
             await editor.finish()
             await self._refresh_dashboard(message, stats, status)
-            await self._maybe_speak(message, editor.text, prefix, speak=speak)
+            await self._maybe_speak(
+                message,
+                editor.text,
+                prefix,
+                speak=speak,
+                voice=self._settings.tts_voice_audio if audio_requested else None,
+            )
         except SessionGone:
             self._store.clear_session(message.chat_id, message.thread_id)
             status, error_kind = "failed", "session_gone"
@@ -348,6 +354,18 @@ class Runner:
                 )
             self._active_session.pop(key, None)
 
+    async def _generate_audio_text(self, session_id: str, request: str) -> str:
+        """Return text to speak; retry once when the provider returns nothing."""
+
+        for prompt in (
+            AUDIO_GENERATION_PROMPT.format(request=request),
+            "Output only one short, friendly sentence in English.",
+        ):
+            text = await self._client.generate(session_id, prompt)
+            if text.strip():
+                return text
+        return "Hello Javier, this is your short audio message."
+
     async def _typing_loop(
         self, message: Inbound, editor: StreamEditor, stop: asyncio.Event
     ) -> None:
@@ -364,7 +382,13 @@ class Runner:
                 continue
 
     async def _maybe_speak(
-        self, message: Inbound, answer: str, prefix: str, *, speak: bool
+        self,
+        message: Inbound,
+        answer: str,
+        prefix: str,
+        *,
+        speak: bool,
+        voice: str | None = None,
     ) -> None:
         """Send a spoken version of the finished answer when the chat asks for it."""
 
@@ -381,7 +405,7 @@ class Runner:
             return
 
         try:
-            speech = await self._tts.synthesize(spoken)
+            speech = await self._tts.synthesize(spoken, voice=voice)
             await self.messenger.send_audio(
                 message.chat_id,
                 speech.data,
