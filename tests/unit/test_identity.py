@@ -22,6 +22,15 @@ def test_prompt_marks_quoted_context() -> None:
     assert "the deploy failed" in prompt
 
 
+def test_audio_reply_tells_the_agent_it_can_speak() -> None:
+    message = inbound()
+    prompt = build_prompt(
+        message, Trigger(kind="private", text="generate audio"), ["Ana"], audio_reply=True
+    )
+    assert "[audio]" in prompt
+    assert "cannot generate or send audio" in prompt
+
+
 def test_prompt_is_bounded() -> None:
     message = inbound()
     huge = "x" * 5000

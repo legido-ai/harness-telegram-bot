@@ -31,6 +31,7 @@ def build_prompt(
     *,
     limit: int = MAX_BLOCK,
     note: str = "",
+    audio_reply: bool = False,
 ) -> str:
     """Compose the text handed to the agent for this turn."""
 
@@ -41,6 +42,11 @@ def build_prompt(
 
     for truncation in (1500, 800, 400, 0):
         parts = [speaker_block(message), conversation_block(message, participants)]
+        if audio_reply:
+            parts.append(
+                "[audio] The bot will also deliver this answer as an audio message. "
+                "Never claim you cannot generate or send audio; answer normally."
+            )
         if quote:
             parts.append(
                 f"[quoted] author: {trigger.quote.author_name} "

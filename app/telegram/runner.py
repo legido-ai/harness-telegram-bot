@@ -25,7 +25,7 @@ from app.opencode.events import (
     EventBus,
 )
 from app.speech.tts import MAX_INPUT_CHARS, TtsClient, TtsError
-from app.store import Store
+from app.store import DEFAULT_TTS_MODE, Store
 from app.telegram.dashboard import dashboard_text
 from app.telegram.footer import RunStats, format_cost, format_tokens
 from app.telegram.identity import attribution_prefix, build_prompt
@@ -186,7 +186,19 @@ class Runner:
             message.chat_id, message.thread_id, message.chat_type, message.chat_title
         )
         participants = self._store.roster()
-        prompt = build_prompt(message, job.trigger, participants, note=job.prompt_note)
+        tts_mode = conversation.tts_mode if conversation else DEFAULT_TTS_MODE
+        audio_reply = bool(
+            self._tts is not None
+            and self._tts.available
+            and (tts_mode == "all" or (tts_mode == "auto" and message.voice_input))
+        )
+        prompt = build_prompt(
+            message,
+            job.trigger,
+            participants,
+            note=job.prompt_note,
+            audio_reply=audio_reply,
+        )
 
         session_id = conversation.active_session_id
         created = False
