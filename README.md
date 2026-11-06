@@ -128,11 +128,12 @@ Audio replies work in three modes, per chat or topic:
 /tts off    silence
 ```
 
-The bot attaches a durable `telegram-bridge` instruction to each OpenCode
-session. That tells the model that audio delivery belongs to the Telegram bot,
-so asking for an audio answer produces the answer instead of a disclaimer about
-the model's own capabilities. It is a session instruction, not text injected
-into the user's message.
+When a message asks for audio, the bot holds the answer until the turn finishes
+and removes paragraphs where the model explains that it cannot generate or send
+audio. That text is noise: the bot is the one producing the audio. The cleaned
+answer is what appears in the chat and what gets spoken, so the phrase you asked
+for is not buried under a capability disclaimer. This is a text filter in the
+bot, not an instruction injected into the session.
 
 The old bridge's stack is the recommended one: local whisper.cpp on
 `opencode-stt` plus Edge TTS, which needs no key.

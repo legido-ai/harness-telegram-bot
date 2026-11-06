@@ -26,6 +26,7 @@ from app.opencode.events import (
 )
 from app.speech.tts import MAX_INPUT_CHARS, TtsClient, TtsError
 from app.store import Store
+from app.telegram.audio_filter import strip_audio_meta, wants_audio
 from app.telegram.dashboard import dashboard_text
 from app.telegram.footer import RunStats, format_cost, format_tokens
 from app.telegram.identity import attribution_prefix, build_prompt
@@ -38,18 +39,6 @@ from app.telegram.types import Inbound
 log = logging.getLogger("bot.runner")
 
 InteractionHook = Callable[[str, Event, "RunState"], Awaitable[None]]
-
-# Attached to the OpenCode session, not sent as a user message. The model treats
-# an in-band note as prompt injection and keeps refusing; a durable instruction
-# entry is authoritative and survives the session history.
-AUDIO_BRIDGE_INSTRUCTION = (
-    "Environment: this session is bridged to Telegram. Audio replies are handled "
-    "entirely by the Telegram bot; they are not a model capability. When the user "
-    "asks for audio, they are asking the bot, not you. Respond only with the text "
-    "that should be spoken, without any commentary about audio, TTS, or what you "
-    "can or cannot do."
-)
-INSTRUCTION_KEY = "telegram-bridge"
 
 
 @dataclass(slots=True)
@@ -95,7 +84,6 @@ class Runner:
         self._active_session: dict[tuple[int, int], str] = {}
         # Chats where pinning is refused (plain member, no rights): stop asking.
         self._pin_denied: set[tuple[int, int]] = set()
-        self._instructions: set[str] = set()
         self._started = False
 
     # -- lifecycle -------------------------------------------------------
@@ -216,8 +204,6 @@ class Runner:
         if not session_id:
             session_id, created = await self.new_session(message, message.user_id)
 
-        await self._ensure_bridge_instruction(session_id)
-
         turn_id = job.turn_id
         if turn_id:
             self._store.attach_turn_session(turn_id, session_id)
@@ -232,6 +218,19 @@ class Runner:
         )
 
         prefix = attribution_prefix(message, len(participants))
+        audio_requested = wants_audio(job.trigger.text)
+        speak = bool(
+            self._tts is not None
+            and self._tts.available
+            and (
+                conversation.tts_mode == "all"
+                or (
+                    conversation.tts_mode == "auto"
+                    and (message.voice_input or audio_requested)
+                )
+            )
+        )
+        filter_audio_meta = speak and audio_requested
         editor = StreamEditor(
             self.messenger.send_text,
             self.messenger.edit_text,
@@ -240,6 +239,7 @@ class Runner:
             reply_to=message.message_id if message.is_private else None,
             prefix=prefix,
             markdown=True,
+            defer_until_finish=filter_audio_meta,
         )
 
         status = "succeeded"
@@ -279,6 +279,9 @@ class Runner:
             finally:
                 self._bus.unsubscribe(session_id)
 
+            if filter_audio_meta:
+                editor.replace(strip_audio_meta(editor.text))
+
             stats = await self._run_stats(
                 session_id,
                 created=created,
@@ -299,7 +302,7 @@ class Runner:
                 editor.append(f"{separator}{done}")
             await editor.finish()
             await self._refresh_dashboard(message, stats, status)
-            await self._maybe_speak(message, editor.text, prefix)
+            await self._maybe_speak(message, editor.text, prefix, speak=speak)
         except SessionGone:
             self._store.clear_session(message.chat_id, message.thread_id)
             status, error_kind = "failed", "session_gone"
@@ -329,16 +332,6 @@ class Runner:
                 )
             self._active_session.pop(key, None)
 
-    async def _ensure_bridge_instruction(self, session_id: str) -> None:
-        """Tell the model once per session that the bot owns audio delivery."""
-
-        if session_id in self._instructions:
-            return
-        if await self._client.set_instruction(
-            session_id, INSTRUCTION_KEY, AUDIO_BRIDGE_INSTRUCTION
-        ):
-            self._instructions.add(session_id)
-
     async def _typing_loop(
         self, message: Inbound, editor: StreamEditor, stop: asyncio.Event
     ) -> None:
@@ -354,14 +347,12 @@ class Runner:
             except TimeoutError:
                 continue
 
-    async def _maybe_speak(self, message: Inbound, answer: str, prefix: str) -> None:
+    async def _maybe_speak(
+        self, message: Inbound, answer: str, prefix: str, *, speak: bool
+    ) -> None:
         """Send a spoken version of the finished answer when the chat asks for it."""
 
-        if self._tts is None or self.messenger is None or not self._tts.available:
-            return
-        conversation = self._store.get_conversation(message.chat_id, message.thread_id)
-        mode = conversation.tts_mode if conversation else "off"
-        if mode == "off" or (mode == "auto" and not message.voice_input):
+        if not speak or self._tts is None or self.messenger is None:
             return
 
         spoken = re.sub(r"\n*✅ I'm done\s*$", "", answer.strip()).strip()

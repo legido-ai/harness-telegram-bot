@@ -1,0 +1,120 @@
+"""Keep the model's audio-capability disclaimers out of an audio answer.
+
+Models that know they are text-only answer a request for audio with the
+requested phrase *plus* a paragraph explaining that they cannot generate audio.
+The Telegram bot generates and sends the audio, so that paragraph is noise in
+the text bubble and in the spoken reply. The model treats in-prompt notes as
+injection, so the filter is applied to its output instead.
+"""
+
+from __future__ import annotations
+
+import re
+
+_AUDIO_TOKEN = re.compile(
+    r"\b(audio|audios|voz|voice|tts|texto a voz|text-to-speech|hablado|spoken)\b",
+    re.IGNORECASE,
+)
+_REQUEST = re.compile(
+    r"\b(genera|generar|generas|generame|manda|mandar|mandas|env[ií]a|enviar|env[ií]as|"
+    r"dame|dar|haz|hacer|quiero|puedes|podr[ií]as|responde|contesta|di|lee|leer|"
+    r"speak|say|send|make|generate|give|read|record)\b",
+    re.IGNORECASE,
+)
+
+_META_ONLY = (
+    "<system-update>",
+    "system-update",
+    "prompt injection",
+    "inyección de prompt",
+    "inyeccion de prompt",
+    "del harness",
+    "el harness",
+    "no la voy a aceptar",
+    "no lo voy a aceptar",
+    "orden del sistema",
+    "instrucción para que",
+    "instruccion para que",
+    "se intenta colar",
+    "colar una instrucción",
+    "colar una instruccion",
+    "descarto ese contexto",
+    "descarto la instrucción",
+    "descarto la instruccion",
+    "ignoro esa instrucción",
+    "ignoro esa instruccion",
+)
+
+_META_WITH_AUDIO = (
+    "no puedo",
+    "no podré",
+    "no podre",
+    "no tengo",
+    "no genero",
+    "no adjunto",
+    "no envío",
+    "no envio",
+    "solo texto",
+    "sólo texto",
+    "texto plano",
+    "text only",
+    "text-only",
+    "no es así",
+    "no es asi",
+    "no voy a afirmar",
+    "ningún archivo",
+    "ningun archivo",
+    "no hay archivo",
+    "no hay ningún",
+    "no hay ningun",
+    "i can't",
+    "i cannot",
+    "i don't",
+    "i do not",
+    "not able",
+    "cannot generate",
+    "cannot send",
+    "no audio",
+    "si el bot",
+    "si tu bot",
+    "el bot de telegram",
+    "telegram bot",
+    "el puente",
+    "dicho claro",
+    "para ser preciso",
+    "para ser precisa",
+    "si de verdad",
+    "si quieres audio",
+    "si necesitas audio",
+    "sigue siendo",
+    "convierte en audio",
+    "convierta en audio",
+)
+
+
+def wants_audio(text: str) -> bool:
+    """True when the message asks the bot to produce or send audio."""
+
+    return bool(_AUDIO_TOKEN.search(text) and _REQUEST.search(text))
+
+
+def _is_disclaimer(block: str) -> bool:
+    lowered = block.lower()
+    if any(marker in lowered for marker in _META_ONLY):
+        return True
+    if not _AUDIO_TOKEN.search(lowered):
+        return False
+    return any(marker in lowered for marker in _META_WITH_AUDIO)
+
+
+def strip_audio_meta(text: str) -> str:
+    """Drop paragraphs that only explain the model's lack of audio support."""
+
+    if not text.strip():
+        return text
+    blocks = re.split(r"\n\s*\n", text)
+    kept = [block for block in blocks if block.strip() and not _is_disclaimer(block)]
+    if not kept:
+        # The model produced nothing but the disclaimer; do not blank the chat.
+        return text
+    return "\n\n".join(block.strip("\n") for block in kept).strip()

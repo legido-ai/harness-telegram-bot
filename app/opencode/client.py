@@ -120,26 +120,6 @@ class OpenCodeClient:
             raise Unavailable()
         return str(session_id)
 
-    async def set_instruction(self, session_id: str, key: str, value: Any) -> bool:
-        """Attach a durable instruction entry the model sees outside user text.
-
-        Experimental in the V2 server: a 404 simply means this build does not
-        support it, and the run continues without the instruction.
-        """
-
-        try:
-            response = await self._client.put(
-                f"/api/experimental/session/{session_id}/instructions/entries/{key}",
-                json={"value": value},
-            )
-        except httpx.HTTPError as exc:
-            log.debug("instruction entry could not be attached: %s", type(exc).__name__)
-            return False
-        if response.status_code >= 400:
-            log.info("instruction entry refused: HTTP %s", response.status_code)
-            return False
-        return True
-
     # -- C3 list sessions ------------------------------------------------
 
     async def list_sessions(self, limit: int = 10) -> list[dict[str, Any]]:

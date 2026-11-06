@@ -171,6 +171,34 @@ async def test_voice_reply_is_spoken_by_default(
     assert fake_server.prompts
 
 
+async def test_audio_request_hides_the_capability_disclaimer(
+    settings, store, client, bus, health, messenger, fake_server
+) -> None:
+    fake_server.script = [
+        '"Small steps still move you forward."',
+        "\n\nNo puedo generar audio. Solo texto.",
+    ]
+    tts = FakeTts()
+    stt = FakeStt(text="genera un audio corto con una frase.")
+    runner = Runner(
+        settings=settings, store=store, client=client, bus=bus, messenger=messenger, tts=tts
+    )
+    app = BotApp(
+        settings=settings, store=store, client=client, runner=runner, state=health, stt=stt
+    )
+    app.bot_id = BOT_ID
+    app.bot_username = BOT_USERNAME
+    app.messenger = messenger
+
+    await send_voice(app, voice_update(chat_id=111, chat_type="private", update_id=40), FakeBot())
+
+    await wait_for(lambda: bool(messenger.audio))
+    assert tts.texts == ['"Small steps still move you forward."']
+    shown = "\n".join(item.text for item in messenger.sent + messenger.edited)
+    assert "Small steps still move you forward." in shown
+    assert "No puedo generar audio" not in shown
+
+
 async def test_tts_off_keeps_voice_answers_silent(
     settings, store, client, bus, health, messenger, fake_server
 ) -> None:

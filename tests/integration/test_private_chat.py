@@ -38,21 +38,6 @@ async def test_prompt_is_answered_from_a_private_chat(
     assert store.recent_turns(1)[0].status in ("succeeded", "running")
 
 
-async def test_audio_bridge_instruction_is_attached_once_per_session(
-    bot_app: BotApp, fake_server, messenger
-) -> None:
-    await send(bot_app, update("first", chat_type="private", chat_id=111, update_id=201))
-    await wait_for(lambda: len(fake_server.prompts) == 1)
-    await send(bot_app, update("second", chat_type="private", chat_id=111, update_id=202))
-    await wait_for(lambda: len(fake_server.prompts) == 2)
-
-    assert len(fake_server.instructions) == 1
-    session_id, key, value = fake_server.instructions[0]
-    assert session_id == fake_server.prompts[0][0]
-    assert key == "telegram-bridge"
-    assert "handled entirely by the Telegram bot" in value
-
-
 async def test_second_prompt_reuses_the_session(bot_app: BotApp, fake_server, messenger) -> None:
     await send(bot_app, update("first", chat_type="private", chat_id=111, update_id=1))
     await wait_for(lambda: len(fake_server.prompts) == 1)

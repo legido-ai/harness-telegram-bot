@@ -60,6 +60,28 @@ async def test_editor_splits_growing_answer_into_new_messages() -> None:
     assert all(len(sent.text) <= 4096 for sent in messenger.sent)
 
 
+async def test_deferred_editor_shows_only_the_filtered_final_text() -> None:
+    messenger = FakeMessenger()
+    editor = StreamEditor(
+        messenger.send_text,
+        messenger.edit_text,
+        chat_id=1,
+        min_interval=0.0,
+        now=lambda: 0.0,
+        defer_until_finish=True,
+    )
+    await editor.start()
+    editor.append("No puedo generar audio.")
+    await editor.flush()
+    assert messenger.sent == []
+
+    editor.replace('"Small steps still move you forward."')
+    await editor.finish()
+    assert [sent.text for sent in messenger.sent] == [
+        '"Small steps still move you forward."'
+    ]
+
+
 async def test_editor_prefixes_attribution_once() -> None:
     messenger = FakeMessenger()
     editor = StreamEditor(

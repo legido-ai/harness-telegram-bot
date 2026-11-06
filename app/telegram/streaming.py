@@ -64,6 +64,7 @@ class StreamEditor:
         now: Callable[[], float] = time.monotonic,
         prefix: str = "",
         markdown: bool = False,
+        defer_until_finish: bool = False,
     ) -> None:
         self._send = send
         self._edit = edit
@@ -74,6 +75,7 @@ class StreamEditor:
         self._now = _Clock(now)
         self._prefix = prefix
         self._markdown = markdown
+        self._defer = defer_until_finish
         self._buffer = ""
         self._sent: list[str] = []
         self._message_ids: list[int] = []
@@ -90,6 +92,11 @@ class StreamEditor:
 
     def append(self, delta: str) -> None:
         self._buffer += delta
+
+    def replace(self, text: str) -> None:
+        """Swap the buffered answer before the final flush (used by filters)."""
+
+        self._buffer = text
 
     def _compose(self, index: int) -> str:
         chunks = split_message(self._buffer)
@@ -115,6 +122,10 @@ class StreamEditor:
         self._last_edit = self._now()
 
     async def flush(self, *, force: bool = False) -> None:
+        # Audio-request answers are held back until the filter has removed the
+        # model's capability disclaimer; nothing false reaches the screen.
+        if self._defer and not force:
+            return
         # The very first send is never gated: until something is on screen there
         # is nothing to coalesce.
         if not force and self._message_ids and not self._due():
