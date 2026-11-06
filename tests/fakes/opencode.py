@@ -23,6 +23,7 @@ class FakeOpenCode:
         self.model_calls: list[tuple[str, str, str]] = []
         self.agent_calls: list[tuple[str, str]] = []
         self.files: list[list[dict[str, str]]] = []
+        self.instructions: list[tuple[str, str, Any]] = []
         self.fail_prompt: int | None = None
         self.publish_on_prompt = True
         self.permission_request: tuple[str, str] | None = None
@@ -173,6 +174,13 @@ class FakeOpenCode:
             session_id = parts[3]
             body = json.loads(request.content or b"{}")
             self.agent_calls.append((session_id, body["agent"]))
+            return httpx.Response(204)
+
+        if "/instructions/entries/" in path and method == "PUT":
+            parts = path.split("/")
+            session_id, key = parts[4], parts[-1]
+            body = json.loads(request.content or b"{}")
+            self.instructions.append((session_id, key, body.get("value")))
             return httpx.Response(204)
 
         if path == "/api/model/default":

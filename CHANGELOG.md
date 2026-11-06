@@ -24,6 +24,10 @@ Voice notes and spoken replies, matching the bridge currently running in OC2
   `/audio/speech`, and ElevenLabs. Markdown is stripped and answers over 4000
   characters are skipped.
 - `/status` now reports `audio replies: <mode>`.
+- Each session gets a durable `telegram-bridge` instruction entry through
+  OpenCode's instruction API, so the model knows the bot owns audio delivery
+  instead of answering that it cannot generate or send audio. An in-message
+  note was rejected by the model as prompt injection; this is authoritative.
 - Schema v4 adds `tts_mode` to conversations with `auto` as the default;
   existing databases migrate in place and the old implicit `off` becomes
   `auto` (a later `/tts off` is explicit and sticks).

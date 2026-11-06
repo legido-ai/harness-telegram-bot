@@ -143,7 +143,6 @@ async def test_tts_modes_control_audio_replies(
     assert tts.texts == ["Hello from the agent"]
     assert messenger.audio[0].chat_id == 111
     assert messenger.audio[0].data == b"ID3fake-mp3"
-    assert "[audio]" in fake_server.prompts[0][1]
 
 
 async def test_voice_reply_is_spoken_by_default(
@@ -170,7 +169,6 @@ async def test_voice_reply_is_spoken_by_default(
     await wait_for(lambda: bool(messenger.audio))
     assert tts.texts == ["Hello from the agent"]
     assert fake_server.prompts
-    assert "[audio]" in fake_server.prompts[0][1]
 
 
 async def test_tts_off_keeps_voice_answers_silent(
@@ -221,12 +219,10 @@ async def test_auto_speaks_voice_requests_only(
     await wait_for(lambda: len(fake_server.prompts) == 1)
     await wait_for(lambda: bool(messenger.edited) or bool(messenger.sent))
     assert messenger.audio == []
-    assert "[audio]" not in fake_server.prompts[0][1]
 
     await send_voice(app, voice_update(chat_id=111, chat_type="private", update_id=22), FakeBot())
     await wait_for(lambda: bool(messenger.audio))
     assert tts.texts == ["Hello from the agent"]
-    assert "[audio]" in fake_server.prompts[1][1]
 
 
 async def test_off_sends_no_audio(
