@@ -32,5 +32,6 @@ reply with TTS, without leaving the Telegram conversation.
 ## Out of scope
 
 - Real-time voice sessions (OpenCode's WebRTC/WebSocket voice API).
-- Google Cloud TTS; Edge, OpenAI-compatible and ElevenLabs are supported.
+- Google Cloud TTS; local Piper, Edge, OpenAI-compatible and ElevenLabs are
+  supported.
 - Automatic language detection for the default voice.

@@ -58,11 +58,11 @@ Multi-arch (`linux/amd64` and `linux/arm64`), built by `.github/workflows/publis
 on every push to `main` and on `v*` tags. Tags published: `latest`, the
 `pyproject.toml` version, and `sha-<commit>`.
 
-The image **includes the speech dependencies by default**: `edge-tts` is in
-`requirements.txt`, so TTS needs no extra install. STT includes the client and
-expects `STT_API_URL` to point at a Whisper-compatible service; the Whisper
-model itself is the separate `opencode-stt` container, not bundled in the bot
-image. The old `0.1.1` image predates speech and should not be used for voice.
+The image **includes the speech clients by default**: `edge-tts` and `httpx` are
+in `requirements.txt`, so TTS needs no extra install. STT includes the client and
+expects `STT_API_URL` to point at the shared `stt` service; the Whisper model
+lives in that container, not in the bot image. The old `0.1.1` image predates
+speech and should not be used for voice.
 
 ## Quickstart
 
@@ -141,17 +141,28 @@ speak, holds them back until the turn finishes, and removes any capability
 disclaimer. The cleaned phrase is what appears in the chat and what gets spoken.
 Nothing is injected into the session and no tools run.
 
-The old bridge's stack is the recommended one: local whisper.cpp on
-`opencode-stt` plus Edge TTS, which needs no key.
+Speech runs fully locally in the shared `box` stack:
+
+```text
+voice in  → stt:9000   (faster-whisper, local model)
+voice out → tts:9000   (Piper, local voices)
+```
+
+Both services are shared with the music app, and no audio or text leaves the
+host. Edge TTS remains available as an optional provider, but it is no longer
+the default.
 
 ```dotenv
-STT_API_URL=http://opencode-stt:9000/v1
+STT_API_URL=http://stt:9000/v1
 STT_API_KEY=local
 STT_MODEL=small
 STT_LANGUAGE=es
 STT_REQUEST_FORMAT=multipart
 
-TTS_PROVIDER=edge
+TTS_PROVIDER=openai
+TTS_API_URL=http://tts:9000/v1
+TTS_API_KEY=local
+TTS_MODEL=piper
 TTS_VOICE=es-ES-ElviraNeural        # normal replies: Spanish
 TTS_VOICE_AUDIO=en-US-AriaNeural    # explicit "generate an audio": English
 ```
@@ -161,11 +172,11 @@ There are two voices: `TTS_VOICE` is the default for normal replies, and
 audio. The explicit-audio path generates its text in English and uses the second
 voice; it falls back to `TTS_VOICE` when `TTS_VOICE_AUDIO` is empty.
 
-`TTS_PROVIDER` also accepts `openai` (any OpenAI-compatible `/audio/speech`
-endpoint, with `TTS_API_URL`/`TTS_API_KEY`/`TTS_MODEL`) and `elevenlabs`
-(`TTS_API_URL`, `TTS_API_KEY`, `TTS_VOICE` is the voice id). Markdown is
-stripped before synthesis, and answers longer than 4000 characters are skipped
-rather than read for minutes.
+The `tts` service exposes an OpenAI-compatible `/audio/speech` endpoint, so
+`TTS_PROVIDER=openai` points the bot at local Piper. `TTS_PROVIDER` also accepts
+`edge` (Microsoft cloud) and `elevenlabs` (`TTS_API_URL`, `TTS_API_KEY`,
+`TTS_VOICE` is the voice id). Markdown is stripped before synthesis, and answers
+longer than 4000 characters are skipped rather than read for minutes.
 
 The Docker sandbox attaches the bot to `box_default` so it can resolve
 `opencode-stt`; on another host point `STT_API_URL` at wherever that service
