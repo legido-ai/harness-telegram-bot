@@ -17,8 +17,17 @@ _AUDIO_TOKEN = re.compile(
 )
 _REQUEST = re.compile(
     r"\b(genera|generar|generas|generame|manda|mandar|mandas|env[ií]a|enviar|env[ií]as|"
-    r"dame|dar|haz|hacer|quiero|puedes|podr[ií]as|responde|contesta|di|lee|leer|"
-    r"speak|say|send|make|generate|give|read|record)\b",
+    r"dame|dar|haz|hacer|quiero|puedes|podr[ií]as|responde|resp[oó]ndeme|respondeme|"
+    r"contesta|cont[eé]stame|contestame|di|lee|leer|speak|say|send|make|generate|give|"
+    r"read|record)\b",
+    re.IGNORECASE,
+)
+
+# “responde en castellano” is an audio request in this bot, even though it does
+# not contain the word "audio".
+_ANSWER_LANGUAGE = re.compile(
+    r"\b(responde|resp[oó]ndeme|respondeme|contesta|cont[eé]stame|contestame|habla|dime)\b"
+    r".{0,40}\b(en\s+)?(castellano|español|espanol|ingl[eé]s|english)\b",
     re.IGNORECASE,
 )
 
@@ -95,6 +104,8 @@ _META_WITH_AUDIO = (
 def wants_audio(text: str) -> bool:
     """True when the message asks the bot to produce or send audio."""
 
+    if _ANSWER_LANGUAGE.search(text):
+        return True
     return bool(_AUDIO_TOKEN.search(text) and _REQUEST.search(text))
 
 

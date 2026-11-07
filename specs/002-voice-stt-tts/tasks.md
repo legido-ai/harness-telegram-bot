@@ -10,7 +10,8 @@
 - [x] Add `tts_mode` to conversations (schema v5, default `off`).
 - [x] Add `/tts off|all|auto` and `audio replies` in `/status`.
 - [x] Send spoken answers as Telegram audio after the text answer.
-- [x] Add `TTS_VOICE` and `TTS_VOICE_AUDIO`.
+- [x] Add `TTS_VOICE` and `TTS_VOICE_AUDIO` with both local voices compiled.
+- [x] Select language and voice for “responde en castellano / inglés”.
 - [x] Route explicit audio requests through `/api/session/{id}/generate`.
 - [x] Filter capability disclaimers and defer display until filtering.
 - [x] Retry empty transient generations and use a short fallback.
@@ -20,7 +21,7 @@
 
 ## Verification
 
-- [x] `155 passed`; `ruff` clean.
+- [x] `159 passed`; `ruff` clean.
 - [x] Real local `text-to-speech` synthesis inside the bot container.
 - [x] Real `speech-to-text` transcription inside the bot container.
 - [x] Telegram `sendAudio` delivery to the private chat.

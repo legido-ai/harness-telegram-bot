@@ -1,7 +1,7 @@
 # Verification — 002 voice input and spoken replies
 
 **Date**: 2026-11-07
-**Commit under test**: `30d3019` on `main`
+**Commit under test**: current `main` (post-`30d3019`)
 **Deployment**: sandbox bot `@legido_opencode2_bot` (`otb-bot`)
 **Status**: Validated
 
@@ -9,7 +9,7 @@
 
 ```text
 $ .venv/bin/python -m pytest -q
-155 passed, 1 warning
+159 passed, 1 warning
 
 $ .venv/bin/python -m ruff check app tests
 All checks passed!
@@ -31,6 +31,8 @@ The music app was verified separately:
 |---|---|
 | Voice note with default `/tts off` | Transcribed and answered in **text only**, no audio file |
 | Explicit “genera un audio corto” | Phrase generated, text posted, local Piper audio sent |
+| “responde en castellano” | Spanish text generated, `es-ES-ElviraNeural` voice |
+| “responde en inglés” | English text generated, `en-US-AriaNeural` voice |
 | Default voice | Spanish `es-ES-ElviraNeural` |
 | Explicit-audio voice | English `en-US-AriaNeural` |
 | Local speech round trip | `text-to-speech` MP3 → `speech-to-text` transcript |

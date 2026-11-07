@@ -31,6 +31,7 @@ from app.telegram.dashboard import dashboard_text
 from app.telegram.footer import RunStats, format_cost, format_tokens
 from app.telegram.identity import attribution_prefix, build_prompt
 from app.telegram.keyboards import context_label, main_menu
+from app.telegram.language import requested_language
 from app.telegram.messenger import Messenger
 from app.telegram.streaming import StreamEditor
 from app.telegram.trigger import Trigger
@@ -42,11 +43,11 @@ InteractionHook = Callable[[str, Event, "RunState"], Awaitable[None]]
 
 AUDIO_GENERATION_PROMPT = (
     "The user is asking for an audio reply. Write only the text that should be "
-    "spoken aloud. IMPORTANT: the text must be in English, even when the user's "
-    "request is in Spanish. Keep it to one or two sentences. If no text is provided, "
-    "invent a short, self-contained English message. Never ask the user for the "
-    "sentence; produce it. Do not explain anything and do not mention audio, TTS, "
-    "tools or capabilities. User request: {request}"
+    "spoken aloud. IMPORTANT: the text must be in {language}, even when the user's "
+    "request is in another language. Keep it to one or two sentences. If no text is "
+    "provided, invent a short, self-contained message in {language}. Never ask the "
+    "user for the sentence; produce it. Do not explain anything and do not mention "
+    "audio, TTS, tools or capabilities. User request: {request}"
 )
 
 
@@ -228,6 +229,12 @@ class Runner:
 
         prefix = attribution_prefix(message, len(participants))
         audio_requested = wants_audio(job.trigger.text)
+        audio_language = requested_language(job.trigger.text) if audio_requested else None
+        audio_voice = (
+            self._settings.tts_voice
+            if audio_language == "es"
+            else self._settings.tts_voice_audio
+        ) if audio_requested else None
         auto_speak = conversation.tts_mode == "all" or (
             conversation.tts_mode == "auto" and message.voice_input
         )
@@ -272,7 +279,9 @@ class Runner:
                 # Do not hand an audio request to the coding agent: it reaches
                 # for tools, builds a TTS script and asks for a phrase. Transient
                 # generation returns the words to speak instead.
-                answer = await self._generate_audio_text(session_id, job.trigger.text)
+                answer = await self._generate_audio_text(
+                    session_id, job.trigger.text, audio_language
+                )
                 editor.replace(answer)
             else:
                 events = self._bus.subscribe(session_id)
@@ -322,7 +331,7 @@ class Runner:
                 editor.text,
                 prefix,
                 speak=speak,
-                voice=self._settings.tts_voice_audio if audio_requested else None,
+                voice=audio_voice,
             )
         except SessionGone:
             self._store.clear_session(message.chat_id, message.thread_id)
@@ -353,17 +362,26 @@ class Runner:
                 )
             self._active_session.pop(key, None)
 
-    async def _generate_audio_text(self, session_id: str, request: str) -> str:
+    async def _generate_audio_text(
+        self, session_id: str, request: str, language: str | None
+    ) -> str:
         """Return text to speak; retry once when the provider returns nothing."""
 
+        spoken_language = "Spanish (Castilian)" if language == "es" else "English"
+        retry = f"Output only one short, friendly sentence in {spoken_language}."
+        fallback = (
+            "Hola Javier, este es tu audio corto."
+            if language == "es"
+            else "Hello Javier, this is your short audio message."
+        )
         for prompt in (
-            AUDIO_GENERATION_PROMPT.format(request=request),
-            "Output only one short, friendly sentence in English.",
+            AUDIO_GENERATION_PROMPT.format(request=request, language=spoken_language),
+            retry,
         ):
             text = await self._client.generate(session_id, prompt)
             if text.strip():
                 return text
-        return "Hello Javier, this is your short audio message."
+        return fallback
 
     async def _typing_loop(
         self, message: Inbound, editor: StreamEditor, stop: asyncio.Event

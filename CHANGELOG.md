@@ -29,11 +29,13 @@ Voice notes and spoken replies, matching the bridge currently running in OC2
 - TTS providers: Microsoft Edge Read Aloud (no key, default), OpenAI-compatible
   `/audio/speech`, and ElevenLabs. Markdown is stripped and answers over 4000
   characters are skipped.
-- Two voice settings: `TTS_VOICE` for normal replies (default: Spanish
-  `es-ES-ElviraNeural`) and `TTS_VOICE_AUDIO` for explicit audio requests
-  (default: English `en-US-AriaNeural`). The explicit-audio text is generated in
-  English so voice and language match; `TTS_VOICE_AUDIO` falls back to
-  `TTS_VOICE` when unset.
+- Two compiled local voices: `es-ES-ElviraNeural` (Castilian) and
+  `en-US-AriaNeural` (English). `TTS_VOICE` is the normal-reply voice;
+  `TTS_VOICE_AUDIO` is the default for explicit audio requests.
+- Explicit audio requests select language from the prompt:
+  “genera un audio en castellano” / “responde en castellano” uses Spanish text
+  and `TTS_VOICE`; “en inglés” uses English text and `TTS_VOICE_AUDIO`. Without a
+  language, the explicit-audio path keeps its English default.
 - Fully local speech: the shared `speech-to-text` (faster-whisper) and `text-to-speech` (Piper)
   containers in the `box` stack. The bot uses them through `STT_API_URL` and an
   OpenAI-compatible `TTS_API_URL`; no audio or text leaves the host. Edge TTS

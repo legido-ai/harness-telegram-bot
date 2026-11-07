@@ -175,6 +175,52 @@ async def test_voice_reply_is_text_only_by_default(
     assert fake_server.prompts
 
 
+async def test_spanish_audio_request_uses_the_spanish_voice(
+    settings, store, client, bus, health, messenger, fake_server
+) -> None:
+    fake_server.generate_text = "Hola Javier, esta es una prueba en castellano."
+    tts = FakeTts()
+    stt = FakeStt(text="responde en castellano")
+    runner = Runner(
+        settings=settings, store=store, client=client, bus=bus, messenger=messenger, tts=tts
+    )
+    app = BotApp(
+        settings=settings, store=store, client=client, runner=runner, state=health, stt=stt
+    )
+    app.bot_id = BOT_ID
+    app.bot_username = BOT_USERNAME
+    app.messenger = messenger
+
+    await send_voice(app, voice_update(chat_id=111, chat_type="private", update_id=50), FakeBot())
+
+    await wait_for(lambda: bool(messenger.audio))
+    assert tts.voices == ["es-ES-ElviraNeural"]
+    assert "Spanish (Castilian)" in fake_server.generated[0]
+
+
+async def test_english_audio_request_uses_the_english_voice(
+    settings, store, client, bus, health, messenger, fake_server
+) -> None:
+    fake_server.generate_text = "Hello Javier, this is an English test."
+    tts = FakeTts()
+    stt = FakeStt(text="responde en inglés")
+    runner = Runner(
+        settings=settings, store=store, client=client, bus=bus, messenger=messenger, tts=tts
+    )
+    app = BotApp(
+        settings=settings, store=store, client=client, runner=runner, state=health, stt=stt
+    )
+    app.bot_id = BOT_ID
+    app.bot_username = BOT_USERNAME
+    app.messenger = messenger
+
+    await send_voice(app, voice_update(chat_id=111, chat_type="private", update_id=51), FakeBot())
+
+    await wait_for(lambda: bool(messenger.audio))
+    assert tts.voices == ["en-US-AriaNeural"]
+    assert "English" in fake_server.generated[0]
+
+
 async def test_audio_request_generates_the_phrase_instead_of_using_tools(
     settings, store, client, bus, health, messenger, fake_server
 ) -> None:

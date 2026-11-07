@@ -141,6 +141,17 @@ An explicit “genera un audio…” request is always spoken, even in `off` mod
 Ordinary voice notes are transcribed and answered in text unless you enable
 `/tts auto` or `/tts all`.
 
+The local TTS image contains **two compiled voices**:
+
+- Castilian: `es-ES-ElviraNeural`
+- English: `en-US-AriaNeural`
+
+Say **“genera un audio en castellano”**, **“responde en castellano”**,
+**“genera un audio en inglés”** or **“responde en inglés”**. The bot generates
+the text in that language and selects the matching voice. Without an explicit
+language, an audio request uses `TTS_VOICE_AUDIO` (English by default). TTS
+itself does not translate; the model writes the requested language.
+
 When a message asks for audio, the bot does **not** send it to the coding agent:
 that agent reaches for tools, builds a TTS script and asks for a phrase. The bot
 instead uses OpenCode's transient text endpoint to produce only the words to
