@@ -60,7 +60,7 @@ on every push to `main` and on `v*` tags. Tags published: `latest`, the
 
 The image **includes the speech clients by default**: `edge-tts` and `httpx` are
 in `requirements.txt`, so TTS needs no extra install. STT includes the client and
-expects `STT_API_URL` to point at the shared `stt` service; the Whisper model
+expects `STT_API_URL` to point at the shared `speech-to-text` service; the Whisper model
 lives in that container, not in the bot image. The old `0.1.1` image predates
 speech and should not be used for voice.
 
@@ -141,7 +141,7 @@ speak, holds them back until the turn finishes, and removes any capability
 disclaimer. The cleaned phrase is what appears in the chat and what gets spoken.
 Nothing is injected into the session and no tools run.
 
-Speech runs fully locally in the shared `box` stack:
+Speech runs fully locally in the shared `speech` compose project:
 
 ```text
 voice in  → stt:9000   (faster-whisper, local model)
@@ -153,14 +153,14 @@ host. Edge TTS remains available as an optional provider, but it is no longer
 the default.
 
 ```dotenv
-STT_API_URL=http://stt:9000/v1
+STT_API_URL=http://speech-to-text:9000/v1
 STT_API_KEY=local
 STT_MODEL=small
 STT_LANGUAGE=es
 STT_REQUEST_FORMAT=multipart
 
 TTS_PROVIDER=openai
-TTS_API_URL=http://tts:9000/v1
+TTS_API_URL=http://text-to-speech:9000/v1
 TTS_API_KEY=local
 TTS_MODEL=piper
 TTS_VOICE=es-ES-ElviraNeural        # normal replies: Spanish
@@ -179,7 +179,7 @@ The `tts` service exposes an OpenAI-compatible `/audio/speech` endpoint, so
 longer than 4000 characters are skipped rather than read for minutes.
 
 The Docker sandbox attaches the bot to `box_default` so it can resolve
-`opencode-stt`; on another host point `STT_API_URL` at wherever that service
+`speech-to-text`; on another host point `STT_API_URL` at wherever that service
 runs.
 
 ## Security model

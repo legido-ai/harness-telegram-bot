@@ -14,8 +14,8 @@
 - [x] Route explicit audio requests through `/api/session/{id}/generate`.
 - [x] Filter capability disclaimers and defer display until filtering.
 - [x] Retry empty transient generations and use a short fallback.
-- [x] Wire the sandbox to the shared `stt` (faster-whisper) and `tts` (Piper)
-      services, replacing `opencode-stt` and Edge TTS.
+- [x] Wire the sandbox to the shared `speech-to-text` (faster-whisper) and
+      `text-to-speech` (Piper) services, replacing `opencode-stt` and Edge TTS.
 - [x] Document the environment in `.env.example` and `README.md`.
 
 ## Verification

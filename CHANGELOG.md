@@ -28,7 +28,7 @@ Voice notes and spoken replies, matching the bridge currently running in OC2
   (default: English `en-US-AriaNeural`). The explicit-audio text is generated in
   English so voice and language match; `TTS_VOICE_AUDIO` falls back to
   `TTS_VOICE` when unset.
-- Fully local speech: the shared `stt` (faster-whisper) and `tts` (Piper)
+- Fully local speech: the shared `speech-to-text` (faster-whisper) and `text-to-speech` (Piper)
   containers in the `box` stack. The bot uses them through `STT_API_URL` and an
   OpenAI-compatible `TTS_API_URL`; no audio or text leaves the host. Edge TTS
   remains an optional provider.

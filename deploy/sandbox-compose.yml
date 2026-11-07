@@ -32,13 +32,13 @@ services:
       HEALTH_HOST: 0.0.0.0
       HEALTH_PORT: "8080"
       # Shared local speech stack on box_default: faster-whisper + Piper.
-      STT_API_URL: http://stt:9000/v1
+      STT_API_URL: http://speech-to-text:9000/v1
       STT_API_KEY: local
       STT_MODEL: small
       STT_LANGUAGE: es
       STT_REQUEST_FORMAT: multipart
       TTS_PROVIDER: openai
-      TTS_API_URL: http://tts:9000/v1
+      TTS_API_URL: http://text-to-speech:9000/v1
       TTS_API_KEY: local
       TTS_MODEL: piper
       # Normal replies speak in the user's language/voice.
