@@ -81,6 +81,15 @@ class BotApp:
         application = (
             Application.builder()
             .token(self.settings.bot_token)
+            # PTB's defaults (5 s read/connect, 1 s pool) are too short for
+            # Telegram file downloads on a small box: voice notes and
+            # documents failed with TimedOut. Keep polling responsive but let
+            # getFile/downloads finish.
+            .connect_timeout(20.0)
+            .read_timeout(120.0)
+            .write_timeout(120.0)
+            .pool_timeout(10.0)
+            .media_write_timeout(120.0)
             .post_init(self.on_startup)
             .concurrent_updates(True)
             .build()
