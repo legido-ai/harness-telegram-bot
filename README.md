@@ -129,10 +129,14 @@ trigger rules as text (mention, reply to a bot message, or a chat set to
 Audio replies work in three modes, per chat or topic:
 
 ```
-/tts auto   speak answers to voice/audio messages (default)
+/tts off    text only (default)
+/tts auto   speak answers to voice/audio messages
 /tts all    speak every assistant answer
-/tts off    silence
 ```
+
+An explicit “genera un audio…” request is always spoken, even in `off` mode.
+Ordinary voice notes are transcribed and answered in text unless you enable
+`/tts auto` or `/tts all`.
 
 When a message asks for audio, the bot does **not** send it to the coding agent:
 that agent reaches for tools, builds a TTS script and asks for a phrase. The bot

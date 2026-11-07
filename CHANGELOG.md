@@ -16,10 +16,11 @@ Voice notes and spoken replies, matching the bridge currently running in OC2
   transcript keeps speaker attribution and quoted context.
 - Group trigger parity for voice: a voice note needs a mention, a reply to the
   bot, or `/trigger all`; a caption-less note stays silent otherwise.
-- `/tts off|all|auto` per chat/topic. `auto` reads only answers to voice notes
-  and is the default, so a spoken question gets a spoken answer without extra
-  setup; `/tts off` keeps a chat silent. Spoken replies are sent as an audio
-  file after the text answer; synthesis failures never lose the answer.
+- `/tts off|all|auto` per chat/topic. `off` is the default: voice notes are
+  transcribed and answered in text only. `auto` speaks answers to voice notes,
+  `all` speaks every answer. An explicit “genera un audio…” request is always
+  spoken, even in `off` mode. Spoken replies are sent as an audio file after the
+  text answer; synthesis failures never lose the answer.
 - TTS providers: Microsoft Edge Read Aloud (no key, default), OpenAI-compatible
   `/audio/speech`, and ElevenLabs. Markdown is stripped and answers over 4000
   characters are skipped.
@@ -41,9 +42,9 @@ Voice notes and spoken replies, matching the bridge currently running in OC2
   paragraphs where the model explains that it cannot generate or send audio.
   In-prompt notes and OpenCode instruction entries were both rejected by the
   model as prompt injection, so this is deterministic output handling.
-- Schema v4 adds `tts_mode` to conversations with `auto` as the default;
-  existing databases migrate in place and the old implicit `off` becomes
-  `auto` (a later `/tts off` is explicit and sticks).
+- Schema v5 makes `off` the default `tts_mode`; existing `auto` rows from v4
+  migrate to `off` so voice notes no longer produce unasked audio. `/tts auto`
+  and `/tts all` remain explicit opt-ins.
 
 ### Changed
 

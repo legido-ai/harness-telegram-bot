@@ -146,7 +146,7 @@ async def test_tts_modes_control_audio_replies(
     assert messenger.audio[0].data == b"ID3fake-mp3"
 
 
-async def test_voice_reply_is_spoken_by_default(
+async def test_voice_reply_is_text_only_by_default(
     settings, store, client, bus, health, messenger, fake_server
 ) -> None:
     tts = FakeTts()
@@ -167,9 +167,11 @@ async def test_voice_reply_is_spoken_by_default(
 
     await send_voice(app, voice_update(chat_id=111, chat_type="private", update_id=30), FakeBot())
 
-    await wait_for(lambda: bool(messenger.audio))
-    assert tts.texts == ["Hello from the agent"]
-    assert tts.voices == [None]
+    await wait_for(
+        lambda: any("Hello from the agent" in item.text for item in messenger.edited)
+    )
+    assert messenger.audio == []
+    assert tts.texts == []
     assert fake_server.prompts
 
 

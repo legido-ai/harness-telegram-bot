@@ -17,8 +17,9 @@ reply with TTS, without leaving the Telegram conversation.
    normal prompt path.
 2. In a group, a voice note follows the same trigger rules as text: mention,
    reply to the bot, or `/trigger all`.
-3. Audio replies have three modes per chat/topic: `/tts off`, `/tts auto`
-   (default: answers to voice/audio messages), `/tts all`.
+3. Audio replies have three modes per chat/topic: `/tts off` (default:
+   text-only), `/tts auto` (answers to voice/audio messages), `/tts all`.
+   An explicit “generate an audio” request is always spoken.
 4. `TTS_VOICE` is the default voice (Spanish in this deployment).
    `TTS_VOICE_AUDIO` is used when the user explicitly asks for an audio, and the
    text for that path is generated in English.

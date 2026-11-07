@@ -7,7 +7,7 @@
 - [x] Add `app/telegram/voice.py`: bounded voice/audio download.
 - [x] Register voice/audio intake before the text handler.
 - [x] Keep group trigger parity for voice notes and captions.
-- [x] Add `tts_mode` to conversations (schema v4, default `auto`).
+- [x] Add `tts_mode` to conversations (schema v5, default `off`).
 - [x] Add `/tts off|all|auto` and `audio replies` in `/status`.
 - [x] Send spoken answers as Telegram audio after the text answer.
 - [x] Add `TTS_VOICE` and `TTS_VOICE_AUDIO`.

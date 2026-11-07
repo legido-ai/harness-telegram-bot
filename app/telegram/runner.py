@@ -228,16 +228,15 @@ class Runner:
 
         prefix = attribution_prefix(message, len(participants))
         audio_requested = wants_audio(job.trigger.text)
+        auto_speak = conversation.tts_mode == "all" or (
+            conversation.tts_mode == "auto" and message.voice_input
+        )
+        # An explicit "generate an audio" request is always honoured, even in
+        # off mode; ordinary voice notes stay text-only.
         speak = bool(
             self._tts is not None
             and self._tts.available
-            and (
-                conversation.tts_mode == "all"
-                or (
-                    conversation.tts_mode == "auto"
-                    and (message.voice_input or audio_requested)
-                )
-            )
+            and (auto_speak or audio_requested)
         )
         filter_audio_meta = speak and audio_requested
         editor = StreamEditor(

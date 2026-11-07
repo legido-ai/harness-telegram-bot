@@ -15,11 +15,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 TTS_MODES = ("off", "all", "auto")
-# Voice input is the one case where a spoken answer is unambiguously expected;
-# text stays silent unless the chat explicitly asks for /tts all.
-DEFAULT_TTS_MODE = "auto"
+# Text-only by default: a voice note is transcribed and answered in text, and
+# audio is sent only when the user explicitly asks for it or enables /tts.
+DEFAULT_TTS_MODE = "off"
 
 DDL = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS conversations (
     kind              TEXT NOT NULL,
     title             TEXT,
     trigger_policy    TEXT NOT NULL DEFAULT 'mention',
-    tts_mode          TEXT NOT NULL DEFAULT 'auto',
+    tts_mode          TEXT NOT NULL DEFAULT 'off',
     model_json        TEXT,
     agent             TEXT,
     active_session_id TEXT,
@@ -200,10 +200,16 @@ class Store:
                     )
             if current < 4:
                 # Before v4 "off" was the implicit default, not an explicit
-                # choice. Voice chats should get their spoken answer.
+                # choice. Keep the historical migration, then v5 turns the
+                # automatic voice replies back off.
                 self._conn.execute(
-                    "UPDATE conversations SET tts_mode=? WHERE tts_mode='off'",
-                    (DEFAULT_TTS_MODE,),
+                    "UPDATE conversations SET tts_mode='auto' WHERE tts_mode='off'"
+                )
+            if current < 5:
+                # v4 defaulted to "auto" and every voice note got an unasked
+                # spoken answer. Audio is now opt-in (or explicit request).
+                self._conn.execute(
+                    "UPDATE conversations SET tts_mode='off' WHERE tts_mode='auto'"
                 )
             if current < SCHEMA_VERSION:
                 self._conn.execute(
