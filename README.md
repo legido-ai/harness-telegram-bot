@@ -120,6 +120,9 @@ carries the current model and `used/limit (percent)`.
 
 ## Voice and audio replies
 
+**Validated 2026-11-07:** voice notes are text-only by default; an explicit
+“genera un audio” request is spoken with local Piper.
+
 Voice input uses any Whisper-compatible `/audio/transcriptions` endpoint. The
 bot downloads the note, shows `🎤 Recognizing audio…`, posts the transcript and
 then treats it as a normal prompt. In a group, a voice note follows the same

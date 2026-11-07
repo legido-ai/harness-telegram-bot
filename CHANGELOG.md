@@ -3,10 +3,15 @@
 All notable changes to this project are documented here. Format follows
 Keep a Changelog; versions use semantic versioning.
 
-## [0.2.0] — 2026-11-06
+## [0.2.0] — 2026-11-07
+
+Validated 2026-11-07 on `@legido_opencode2_bot`: voice notes are text-only by
+default; explicit audio requests are spoken with local Piper. The bot uses the
+shared `speech-to-text` and `text-to-speech` containers, and the old `opencode`
+bridge remains on its dedicated STT plus Edge TTS.
 
 Voice notes and spoken replies, matching the bridge currently running in OC2
-(`@grinev/opencode-telegram-bot`): local Whisper STT plus Edge TTS.
+(`@grinev/opencode-telegram-bot`): local Whisper STT plus local Piper TTS.
 
 ### Added
 

@@ -21,11 +21,14 @@
 ## Verification
 
 - [x] `155 passed`; `ruff` clean.
-- [x] Real Edge TTS synthesis inside the bot container.
-- [x] Real `opencode-stt` transcription inside the bot container.
+- [x] Real local `text-to-speech` synthesis inside the bot container.
+- [x] Real `speech-to-text` transcription inside the bot container.
 - [x] Telegram `sendAudio` delivery to the private chat.
 - [x] Explicit audio request produces English text and uses
       `en-US-AriaNeural`.
 - [x] Default reply uses `es-ES-ElviraNeural`.
-- [x] Schema v4 migration applied to the existing volume.
+- [x] Default `/tts off`: voice notes are text-only.
+- [x] Schema v5 migration applied to the existing volume.
 - [x] Bot health `ok` after redeploy.
+- [x] Music uses the shared speech services; `141` tests pass.
+- [x] Old `opencode` remains on its dedicated `opencode-stt` + Edge TTS.
