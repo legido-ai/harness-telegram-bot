@@ -3,6 +3,27 @@
 All notable changes to this project are documented here. Format follows
 Keep a Changelog; versions use semantic versioning.
 
+## [0.2.1] — 2026-11-07
+
+The completion line is a message of its own again, because a reply keyboard can
+only move on a fresh send: the `📊` button now shows the real consumption after
+every run instead of whatever `/new` computed. The answer no longer carries
+`✅ I'm done`; a second, short bubble does, with the numbers and the keyboard.
+
+### Added
+
+- `Runner._sign_off` sends `✅ I'm done · 42K/1.0M (4%) · 12s` after the answer,
+  with the reply keyboard attached, so the context button and the pinned card
+  agree. A trailing sign-off written by the agent is stripped to avoid a double.
+- `percent_text` renders a started-but-tiny session as `<1%` instead of `0%`,
+  in the footer, the pinned card and the keyboard label.
+
+### Changed
+
+- The answer is once again one message and the sign-off another; the extra
+  bubble is the price of a keyboard that can be relabelled.
+- Version bumped to 0.2.1.
+
 ## [0.2.0] — 2026-11-07
 
 Validated 2026-11-07 on `@legido_opencode2_bot`: voice notes are text-only by

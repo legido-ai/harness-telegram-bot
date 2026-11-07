@@ -22,11 +22,20 @@ class RunStats:
     session_id: str | None = None
     created: bool = False
 
-    @property
-    def percent(self) -> int | None:
-        if not self.used_tokens or not self.limit_tokens:
-            return None
-        return round(self.used_tokens / self.limit_tokens * 100)
+SIGN_OFF = "✅ I'm done"
+
+
+def percent_text(used: int | None, limit: int | None) -> str | None:
+    """``4%``, or ``<1%`` when a started session is small but not empty.
+
+    A million-token window rounds most early turns to zero, which reads as "the
+    counter is broken" instead of "there is almost nothing in it yet".
+    """
+
+    if not used or not limit:
+        return None
+    percent = round(used / limit * 100)
+    return "<1%" if percent < 1 else f"{percent}%"
 
 
 def format_tokens(count: int) -> str:
@@ -69,10 +78,10 @@ def format_footer(stats: RunStats) -> str:
         parts.append(stats.model or model)
 
     if stats.used_tokens is not None and stats.limit_tokens:
-        percent = stats.percent
+        percent = percent_text(stats.used_tokens, stats.limit_tokens)
         parts.append(
             f"{format_tokens(stats.used_tokens)}/{format_tokens(stats.limit_tokens)}"
-            + (f" ({percent}%)" if percent is not None else "")
+            + (f" ({percent})" if percent is not None else "")
         )
     elif stats.used_tokens:
         parts.append(f"{format_tokens(stats.used_tokens)} tok")
@@ -93,3 +102,24 @@ def format_footer(stats: RunStats) -> str:
     if stats.created and stats.session_id:
         line += f" · new session {_short_session(stats.session_id)}"
     return line
+
+
+def format_sign_off(stats: RunStats | None) -> str:
+    """``✅ I'm done · 42K/200K (21%) · 12s``: the end of a run in one bubble.
+
+    Telegram only relabels a reply keyboard from a fresh send, so this message
+    is both the completion signal and the thing that keeps the context button
+    honest. The model already owns its own button, so it is not repeated here.
+    """
+
+    parts = [SIGN_OFF]
+    if stats is not None:
+        if stats.used_tokens and stats.limit_tokens:
+            percent = percent_text(stats.used_tokens, stats.limit_tokens)
+            parts.append(
+                f"{format_tokens(stats.used_tokens)}/{format_tokens(stats.limit_tokens)}"
+                + (f" ({percent})" if percent is not None else "")
+            )
+        if stats.seconds is not None:
+            parts.append(format_duration(stats.seconds))
+    return " · ".join(parts)

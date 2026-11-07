@@ -5,8 +5,11 @@ from app.telegram.footer import (
     format_cost,
     format_duration,
     format_footer,
+    format_sign_off,
     format_tokens,
+    percent_text,
 )
+from app.telegram.keyboards import CONTEXT_EMPTY, context_label
 
 
 def test_token_counts_are_compact() -> None:
@@ -56,3 +59,25 @@ def test_new_session_is_marked() -> None:
 def test_free_model_does_not_print_a_zero_cost() -> None:
     stats = RunStats(model="flash", used_tokens=100, limit_tokens=1000, cost_usd=0.0, seconds=2)
     assert "$" not in format_footer(stats)
+
+
+def test_a_started_session_never_reads_as_zero() -> None:
+    assert percent_text(1_000, 1_000_000) == "<1%"
+    assert percent_text(55_000, 1_000_000) == "6%"
+    assert percent_text(0, 1_000_000) is None
+    assert percent_text(42_000, None) is None
+
+
+def test_sign_off_carries_the_numbers_and_nothing_else() -> None:
+    stats = RunStats(
+        provider="go", model="flash", used_tokens=42_000, limit_tokens=200_000, seconds=12
+    )
+    assert format_sign_off(stats) == "✅ I'm done · 42K/200K (21%) · 12s"
+    assert format_sign_off(RunStats(seconds=3)) == "✅ I'm done · 3s"
+    assert format_sign_off(None) == "✅ I'm done"
+
+
+def test_keyboard_label_marks_a_tiny_session() -> None:
+    assert context_label(1_000, 1_000_000) == "📊 1K / 1.0M (<1%)"
+    assert context_label(None, 1_000_000) == "📊 0 / 1.0M (0%)"
+    assert context_label(None, None) == CONTEXT_EMPTY

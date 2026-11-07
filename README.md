@@ -21,7 +21,7 @@ needs:
 | Quoted messages | a reply quotes the previous answer as *context*, and a mention inside a quote never triggers |
 | Approvals | the first allowlisted human to press Allow/Deny decides; the message records who |
 | Restarts | sessions, bindings, turn history and the dedupe ledger survive in SQLite on a volume |
-| Consumption | every answer ends with `— model · 42K/200K (21%) · $0.03 · 12s`: context used, cost and duration |
+| Consumption | every run closes with `✅ I'm done · 42K/200K (21%) · 12s` in its own message, which also relabels the `📊` button |
 | Voice input | send a voice note or audio file; it is transcribed (Whisper-compatible API) and answered like text |
 | Spoken replies | `/tts all` reads every answer, `/tts auto` only answers to voice messages, `/tts off` is silent |
 
@@ -51,7 +51,7 @@ Telegram ──long poll──► app.telegram.app  ──► trigger + identity
 Public, no credentials needed:
 
 ```bash
-docker pull ghcr.io/legido-ai/opencode-telegram-bot:0.2.0   # or :latest
+docker pull ghcr.io/legido-ai/opencode-telegram-bot:0.2.1   # or :latest
 ```
 
 Multi-arch (`linux/amd64` and `linux/arm64`), built by `.github/workflows/publish.yml`
@@ -114,9 +114,11 @@ Useful commands: `/new`, `/sessions`, `/abort`, `/status`, `/model`, `/agent`,
 /model          pick provider, then model
 ```
 
-Every answer is one message: the reply plus `✅ I'm done` on the last line. The
-pinned card carries model, context usage, cost and queue depth; the keyboard
-carries the current model and `used/limit (percent)`.
+The answer is one message; a second, short one closes the run:
+`✅ I'm done · 42K/1.0M (4%) · 12s`. That bubble exists because Telegram only
+relabels a reply keyboard from a fresh send, so it is also what keeps the `📊`
+button current. The pinned card carries model, context usage, cost and queue
+depth; the keyboard carries the current model and `used/limit (percent)`.
 
 ## Voice and audio replies
 

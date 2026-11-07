@@ -7,7 +7,7 @@ message per conversation, edited in place, pinned once.
 
 from __future__ import annotations
 
-from app.telegram.footer import RunStats, format_cost, format_tokens
+from app.telegram.footer import RunStats, format_cost, format_tokens, percent_text
 
 
 def _short(session_id: str | None) -> str:
@@ -33,9 +33,9 @@ def dashboard_text(
 
     used = stats.used_tokens or 0
     if stats.limit_tokens:
-        percent = round(used / stats.limit_tokens * 100)
+        percent = percent_text(stats.used_tokens, stats.limit_tokens) or "0%"
         lines.append(
-            f"context {format_tokens(used)}/{format_tokens(stats.limit_tokens)} ({percent}%)"
+            f"context {format_tokens(used)}/{format_tokens(stats.limit_tokens)} ({percent})"
         )
     elif used:
         lines.append(f"context {format_tokens(used)} tokens")

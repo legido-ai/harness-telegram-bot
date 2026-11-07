@@ -28,7 +28,7 @@ from app.speech.tts import MAX_INPUT_CHARS, TtsClient, TtsError
 from app.store import Store
 from app.telegram.audio_filter import strip_audio_meta, wants_audio
 from app.telegram.dashboard import dashboard_text
-from app.telegram.footer import RunStats, format_cost, format_tokens
+from app.telegram.footer import RunStats, format_cost, format_sign_off, format_tokens
 from app.telegram.identity import attribution_prefix, build_prompt
 from app.telegram.keyboards import context_label, main_menu
 from app.telegram.language import requested_language
@@ -49,6 +49,14 @@ AUDIO_GENERATION_PROMPT = (
     "user for the sentence; produce it. Do not explain anything and do not mention "
     "audio, TTS, tools or capabilities. User request: {request}"
 )
+
+_SIGN_OFF_RE = re.compile(r"\s*✅\s*I(?:'m| am) done\.?\s*$")
+
+
+def strip_sign_off(text: str) -> str:
+    """Drop a trailing completion line the agent may have written on its own."""
+
+    return _SIGN_OFF_RE.sub("", text).strip()
 
 
 @dataclass(slots=True)
@@ -312,19 +320,19 @@ class Runner:
                 seconds=time.monotonic() - started_at,
                 model_hint=conversation.model,
             )
-            if not editor.text.strip():
+            # The completion line is its own message: Telegram only relabels a
+            # reply keyboard from a fresh send, so the sign-off is also what
+            # keeps the context button honest.
+            answer = strip_sign_off(editor.text)
+            if not answer:
                 # No text at all: either the agent failed or it produced silence.
                 failure = await self._last_error(session_id)
-                editor.append(failure or "The agent finished without producing an answer.")
+                answer = failure or "The agent finished without producing an answer."
                 status = "failed" if failure else status
                 error_kind = error_kind or ("agent_error" if failure else "empty_answer")
-            # One message per answer: the done line belongs to the answer text,
-            # not to a second bubble that only exists to carry a keyboard.
-            done = "✅ I'm done"
-            if done not in editor.text:
-                separator = "\n\n" if editor.text.strip() else ""
-                editor.append(f"{separator}{done}")
+            editor.replace(answer)
             await editor.finish()
+            await self._sign_off(message, stats)
             await self._refresh_dashboard(message, stats, status)
             await self._maybe_speak(
                 message,
@@ -412,7 +420,7 @@ class Runner:
         if not speak or self._tts is None or self.messenger is None:
             return
 
-        spoken = re.sub(r"\n*✅ I'm done\s*$", "", answer.strip()).strip()
+        spoken = strip_sign_off(answer)
         if prefix and spoken.startswith(prefix):
             spoken = spoken[len(prefix) :].strip()
         if not spoken:
@@ -470,6 +478,23 @@ class Runner:
             return None
         error = usage.get("error")
         return f"⚠️ {error}" if isinstance(error, str) and error else None
+
+    async def _sign_off(self, message: Inbound, stats: RunStats | None) -> None:
+        """Close the run with the one message that can also relabel the keyboard.
+
+        Telegram refuses to attach a reply keyboard on an edit, so a fresh
+        message is the only way the context button can show current numbers.
+        That message is the completion signal too: one bubble, two jobs.
+        """
+
+        if self.messenger is None:
+            return
+        await self.messenger.send_text(
+            message.chat_id,
+            format_sign_off(stats),
+            thread_id=message.thread_id,
+            keyboard=self._keyboard_for(stats, self._model_label(message)),
+        )
 
     async def _refresh_dashboard(
         self, message: Inbound, stats: RunStats, status: str = "idle"

@@ -272,7 +272,7 @@ async def test_tts_off_keeps_voice_answers_silent(
     await app._cmd_tts(app._inbound(update("/tts off", chat_id=111, chat_type="private")), "off")
     await send_voice(app, voice_update(chat_id=111, chat_type="private", update_id=31), FakeBot())
 
-    await wait_for(lambda: any("I'm done" in item.text for item in messenger.edited))
+    await wait_for(lambda: any("I'm done" in item.text for item in messenger.sent))
     assert messenger.audio == []
     assert tts.texts == []
 
@@ -318,7 +318,7 @@ async def test_off_sends_no_audio(
 
     await send_text(app, "hello", update_id=23)
     await wait_for(lambda: len(fake_server.prompts) == 1)
-    await wait_for(lambda: any("I'm done" in item.text for item in messenger.edited))
+    await wait_for(lambda: any("I'm done" in item.text for item in messenger.sent))
     assert messenger.audio == []
     assert tts.texts == []
 

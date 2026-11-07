@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.telegram.footer import format_tokens
+from app.telegram.footer import format_tokens, percent_text
 
 
 def _markup(rows: list[list[tuple[str, str]]]) -> Any:
@@ -23,8 +23,8 @@ def context_label(used: int | None, limit: int | None) -> str:
     """The context button *shows* the usage: 📊 6K / 1.0M (1%)."""
 
     if limit:
-        percent = round((used or 0) / limit * 100)
-        return f"📊 {format_tokens(used or 0)} / {format_tokens(limit)} ({percent}%)"
+        percent = percent_text(used, limit) or "0%"
+        return f"📊 {format_tokens(used or 0)} / {format_tokens(limit)} ({percent})"
     if used:
         return f"📊 {format_tokens(used)}"
     return CONTEXT_EMPTY

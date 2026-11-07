@@ -78,15 +78,19 @@ async def test_duplicate_update_runs_once(bot_app: BotApp, fake_server) -> None:
     assert len(fake_server.prompts) == 1
 
 
-async def test_one_message_per_answer(bot_app: BotApp, messenger) -> None:
+async def test_sign_off_is_its_own_message(bot_app: BotApp, messenger) -> None:
     await send(bot_app, update("sign off", chat_type="private", chat_id=111, update_id=121))
-    await wait_for(lambda: any("I'm done" in item.text for item in messenger.sent + messenger.edited))
+    await wait_for(lambda: any(item.text.startswith("✅ I'm done") for item in messenger.sent))
 
     answers = [m for m in messenger.sent + messenger.edited if "Hello" in m.text]
-    done = [m for m in messenger.sent + messenger.edited if m.text.strip() == "✅ I'm done"]
+    done = [m for m in messenger.sent if m.text.startswith("✅ I'm done")]
     assert answers, "no answer"
-    assert not done, "the done line must not be a message of its own"
-    assert "✅ I'm done" in answers[-1].text
+    assert len(done) == 1, "the sign-off must be exactly one message of its own"
+    assert "I'm done" not in answers[-1].text
+    # That message is also what relabels the reply keyboard, so it must carry
+    # the current consumption instead of a bare check mark.
+    assert done[0].keyboard is not None
+    assert "42K/200K (21%)" in done[0].text
 
 
 async def test_consumption_lives_in_the_card_not_in_chat_noise(
@@ -195,7 +199,7 @@ async def test_replying_to_an_auto_quoted_answer_does_not_trigger(
     bot_app: BotApp, fake_server, messenger
 ) -> None:
     await send(bot_app, update("first", chat_type="private", chat_id=111, update_id=141))
-    await wait_for(lambda: any("I'm done" in item.text for item in messenger.edited))
+    await wait_for(lambda: any("I'm done" in item.text for item in messenger.sent))
     prompts_before = len(fake_server.prompts)
 
     from tests.telegram_factory import message_payload
