@@ -1,7 +1,7 @@
 # Verification — 002 voice input and spoken replies
 
 **Date**: 2026-11-07
-**Commit under test**: current `main` (post-`30d3019`)
+**Commit under test**: `3ec6984` on `main`
 **Deployment**: sandbox bot `@legido_opencode2_bot` (`otb-bot`)
 **Status**: Validated
 

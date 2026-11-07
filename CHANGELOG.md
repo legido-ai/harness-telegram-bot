@@ -6,9 +6,11 @@ Keep a Changelog; versions use semantic versioning.
 ## [0.2.0] — 2026-11-07
 
 Validated 2026-11-07 on `@legido_opencode2_bot`: voice notes are text-only by
-default; explicit audio requests are spoken with local Piper. The bot uses the
-shared `speech-to-text` and `text-to-speech` containers, and the old `opencode`
-bridge remains on its dedicated STT plus Edge TTS.
+default; explicit audio requests are spoken with local Piper. “Responde en
+castellano” and “responde en inglés” select the text language and matching
+voice. The bot uses the shared `speech-to-text` and `text-to-speech`
+containers, and the old `opencode` bridge remains on its dedicated STT plus Edge
+TTS.
 
 Voice notes and spoken replies, matching the bridge currently running in OC2
 (`@grinev/opencode-telegram-bot`): local Whisper STT plus local Piper TTS.
@@ -26,9 +28,9 @@ Voice notes and spoken replies, matching the bridge currently running in OC2
   `all` speaks every answer. An explicit “genera un audio…” request is always
   spoken, even in `off` mode. Spoken replies are sent as an audio file after the
   text answer; synthesis failures never lose the answer.
-- TTS providers: Microsoft Edge Read Aloud (no key, default), OpenAI-compatible
-  `/audio/speech`, and ElevenLabs. Markdown is stripped and answers over 4000
-  characters are skipped.
+- TTS providers: local Piper (default, shared container), Microsoft Edge Read
+  Aloud, OpenAI-compatible `/audio/speech`, and ElevenLabs. Markdown is stripped
+  and answers over 4000 characters are skipped.
 - Two compiled local voices: `es-ES-ElviraNeural` (Castilian) and
   `en-US-AriaNeural` (English). `TTS_VOICE` is the normal-reply voice;
   `TTS_VOICE_AUDIO` is the default for explicit audio requests.
@@ -36,10 +38,10 @@ Voice notes and spoken replies, matching the bridge currently running in OC2
   “genera un audio en castellano” / “responde en castellano” uses Spanish text
   and `TTS_VOICE`; “en inglés” uses English text and `TTS_VOICE_AUDIO`. Without a
   language, the explicit-audio path keeps its English default.
-- Fully local speech: the shared `speech-to-text` (faster-whisper) and `text-to-speech` (Piper)
-  containers in the `box` stack. The bot uses them through `STT_API_URL` and an
-  OpenAI-compatible `TTS_API_URL`; no audio or text leaves the host. Edge TTS
-  remains an optional provider.
+- Fully local speech: the shared `speech-to-text` (faster-whisper) and
+  `text-to-speech` (Piper) containers in the `speech` compose project. The bot
+  uses them through `STT_API_URL` and an OpenAI-compatible `TTS_API_URL`; no
+  audio or text leaves the host. Edge TTS remains an optional provider.
 - `/status` now reports `audio replies: <mode>`.
 - Audio requests bypass the coding agent: the bot calls OpenCode's transient
   text endpoint (`/api/session/{id}/generate`), which does not run tools or
