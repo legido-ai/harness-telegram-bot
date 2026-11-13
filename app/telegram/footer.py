@@ -53,10 +53,22 @@ def format_cost(cost_usd: float) -> str:
 
 
 def format_duration(seconds: float) -> str:
-    if seconds < 60:
-        return f"{seconds:.0f}s"
-    minutes, rest = divmod(int(seconds), 60)
-    return f"{minutes}m{rest:02d}s"
+    """Elapsed time as it reads in chat: ``42s``, then ``1m 05s``, then ``1h 02m 05s``."""
+
+    total = max(0, int(seconds))
+    if total < 60:
+        return f"{total}s"
+    minutes, rest = divmod(total, 60)
+    if minutes < 60:
+        return f"{minutes}m {rest:02d}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h {minutes:02d}m {rest:02d}s"
+
+
+def format_elapsed(seconds: float) -> str:
+    """Alias used by the status bubble, so both places read the same."""
+
+    return format_duration(seconds)
 
 
 def _short_session(session_id: str) -> str:

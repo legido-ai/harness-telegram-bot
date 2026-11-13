@@ -5,8 +5,8 @@ import json
 import httpx
 import pytest
 
-from app.opencode.client import OpenCodeClient
-from app.opencode.errors import AuthError, Busy, SessionGone, Unavailable
+from app.backends.errors import AuthError, Busy, SessionGone, Unavailable
+from app.backends.opencode.client import OpenCodeClient
 
 
 class Recorder:

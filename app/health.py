@@ -22,6 +22,7 @@ class HealthState:
     sse_connected: bool = False
     last_sse_at: float | None = None
     agent_ok: bool = False
+    backend: str = "opencode"
     rejections: int = 0
 
     def note_update(self) -> None:
@@ -41,6 +42,7 @@ class HealthState:
         return (
             {
                 "status": "ok" if healthy else "degraded",
+                "backend": self.backend,
                 "uptime_s": int(now - self.started_at),
                 "poller_alive": self.poller_alive,
                 "last_update_age_s": int(silent_for) if silent_for is not None else None,
@@ -54,7 +56,7 @@ class HealthState:
 
 
 def create_app(settings: Settings, store: Store, state: HealthState) -> FastAPI:
-    app = FastAPI(title="opencode-telegram-bot", docs_url=None, redoc_url=None)
+    app = FastAPI(title="harness-telegram-bot", docs_url=None, redoc_url=None)
 
     @app.get("/healthz")
     async def healthz(response: Response) -> dict[str, Any]:

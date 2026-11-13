@@ -121,6 +121,32 @@ class StreamEditor:
         self._started = True
         self._last_edit = self._now()
 
+    async def status(self, text: str) -> None:
+        """Show a status line in the answer's place until real text arrives.
+
+        The bubble is the same message the answer will replace, so the chat
+        never accumulates scaffolding.
+        """
+
+        if self._defer or self._buffer.strip():
+            return
+        if not self._message_ids:
+            message_id = await self._send(
+                self._chat_id,
+                text,
+                thread_id=self._thread_id,
+                reply_to=self._reply_to,
+                markdown=False,
+            )
+            self._message_ids.append(message_id)
+            self._sent.append(text)
+        else:
+            if not self._due() or self._sent[0] == text:
+                return
+            await self._edit(self._chat_id, self._message_ids[0], text, markdown=False)
+            self._sent[0] = text
+        self._last_edit = self._now()
+
     async def flush(self, *, force: bool = False) -> None:
         # Audio-request answers are held back until the filter has removed the
         # model's capability disclaimer; nothing false reaches the screen.

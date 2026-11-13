@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import httpx
 
-from app.opencode.client import OpenCodeClient
+from app.backends.opencode.client import OpenCodeClient
 from tests.fakes.opencode import FakeOpenCode
 
 

@@ -11,19 +11,17 @@ import uvicorn
 from telegram import Update
 from telegram.error import Conflict, InvalidToken
 
+from app.backends import build_backend
+from app.backends.errors import HarnessError
 from app.config import ConfigError, Settings
 from app.health import HealthState, create_app
 from app.logging import configure_logging
-from app.opencode.client import OpenCodeClient
-from app.opencode.errors import OpenCodeError
-from app.opencode.events import EventBus, consume_events
 from app.speech.stt import SttClient
 from app.speech.tts import TtsClient
 from app.store import Store
 from app.telegram.app import BotApp
 from app.telegram.runner import Runner
 
-AGENT_POLL_INTERVAL = 60.0
 POLLER_CHECK_INTERVAL = 15.0
 
 
@@ -42,15 +40,13 @@ async def _poller_watch(application, state: HealthState, stop: asyncio.Event) ->
             continue
 
 
-async def _agent_watch(client: OpenCodeClient, state: HealthState, stop: asyncio.Event) -> None:
+async def _agent_watch(backend, state: HealthState, stop: asyncio.Event) -> None:
+    """Kept for the opencode backend: its SSE stream is started separately."""
+
     while not stop.is_set():
+        state.agent_ok = await backend.ping()
         try:
-            await client.info()
-            state.agent_ok = True
-        except OpenCodeError:
-            state.agent_ok = False
-        try:
-            await asyncio.wait_for(stop.wait(), timeout=AGENT_POLL_INTERVAL)
+            await asyncio.wait_for(stop.wait(), timeout=POLLER_CHECK_INTERVAL * 4)
         except TimeoutError:
             continue
 
@@ -65,20 +61,26 @@ async def run() -> int:
     store = Store(settings.db_path)
     store.migrate()
     store.prune_delivery()
+    if store.bind_backend(settings.backend):
+        log.warning("session bindings cleared: this database belongs to another backend")
 
-    client = OpenCodeClient(
-        settings.opencode_url, settings.opencode_password, username=settings.opencode_username
-    )
-    bus = EventBus()
-    state = HealthState()
+    backend = build_backend(settings)
+    state = HealthState(backend=settings.backend)
     stt = SttClient(settings)
     tts = TtsClient(settings)
-    runner = Runner(settings=settings, store=store, client=client, bus=bus, tts=tts)
+    runner = Runner(settings=settings, store=store, backend=backend, tts=tts)
 
     bot_app = BotApp(
-        settings=settings, store=store, client=client, runner=runner, state=state, stt=stt
+        settings=settings, store=store, backend=backend, runner=runner, state=state, stt=stt
     )
     runner.set_interaction_hook(bot_app.on_interaction)
+
+    try:
+        await backend.start()
+    except HarnessError as exc:
+        log.error("backend %s cannot start: %s", settings.backend, exc.user_message)
+        store.close()
+        return 78
 
     application = bot_app.build()
     try:
@@ -124,10 +126,8 @@ async def run() -> int:
     )
     tasks = [
         asyncio.create_task(server.serve(), name="health"),
-        asyncio.create_task(
-            consume_events(client, bus, stop, on_state=state.note_sse), name="events"
-        ),
-        asyncio.create_task(_agent_watch(client, state, stop), name="agent-watch"),
+        asyncio.create_task(backend.background(stop, state), name="backend"),
+        asyncio.create_task(_agent_watch(backend, state, stop), name="agent-watch"),
         asyncio.create_task(_poller_watch(application, state, stop), name="poller-watch"),
     ]
 
@@ -143,7 +143,7 @@ async def run() -> int:
         task.cancel()
     with contextlib.suppress(Exception):
         await asyncio.gather(*tasks, return_exceptions=True)
-    await client.aclose()
+    await backend.aclose()
     store.close()
     log.info("bot stopped")
     return 0

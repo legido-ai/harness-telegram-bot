@@ -11,9 +11,9 @@ from tests.telegram_factory import BOT_ID, BOT_USERNAME, update
 
 
 async def test_operator_can_see_who_asked(
-    settings, store, client, runner, health, messenger
+    settings, store, backend, runner, health, messenger
 ) -> None:
-    app = BotApp(settings=settings, store=store, client=client, runner=runner, state=health)
+    app = BotApp(settings=settings, store=store, backend=backend, runner=runner, state=health)
     app.bot_id = BOT_ID
     app.bot_username = BOT_USERNAME
     app.messenger = messenger

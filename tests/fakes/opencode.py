@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 
-from app.opencode.events import Event, EventBus
+from app.backends.opencode.events import Event, EventBus
 
 
 class FakeOpenCode:

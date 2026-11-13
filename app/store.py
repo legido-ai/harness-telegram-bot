@@ -225,6 +225,40 @@ class Store:
         row = self._conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
         return int(row["value"]) if row else 0
 
+    # -- meta ------------------------------------------------------------
+
+    def get_meta(self, key: str) -> str | None:
+        row = self._conn.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+        return str(row["value"]) if row else None
+
+    def set_meta(self, key: str, value: str) -> None:
+        with self._conn:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)", (key, value)
+            )
+
+    def bind_backend(self, backend: str) -> bool:
+        """Pin which harness owns the bindings in this database.
+
+        Returns True when the bindings were cleared because the database came
+        from a different harness: a session id from one is meaningless to the
+        other, and feeding it across would fail on every prompt.
+        """
+
+        previous = self.get_meta("backend")
+        self.set_meta("backend", backend)
+        if previous and previous != backend:
+            self.clear_all_sessions()
+            return True
+        return False
+
+    def clear_all_sessions(self) -> None:
+        with self._conn:
+            self._conn.execute("UPDATE session_bindings SET active=0")
+            self._conn.execute("DELETE FROM session_bindings")
+            self._conn.execute("UPDATE conversations SET active_session_id=NULL")
+            self._conn.execute("DELETE FROM pending_interactions")
+
     # -- delivery ledger -------------------------------------------------
 
     def mark_seen(self, update_id: int) -> bool:

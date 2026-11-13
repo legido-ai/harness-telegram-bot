@@ -14,21 +14,20 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from app.backends.base import Backend, Interaction
+from app.backends.errors import Busy, HarnessError, SessionGone, Unavailable, Unsupported
 from app.config import Settings
-from app.opencode.client import OpenCodeClient
-from app.opencode.errors import Busy, OpenCodeError, SessionGone, Unavailable
-from app.opencode.events import (
-    EXECUTION_DONE,
-    FORM_CREATED,
-    PERMISSION_ASKED,
-    Event,
-    EventBus,
-)
 from app.speech.tts import MAX_INPUT_CHARS, TtsClient, TtsError
 from app.store import Store
 from app.telegram.audio_filter import strip_audio_meta, wants_audio
 from app.telegram.dashboard import dashboard_text
-from app.telegram.footer import RunStats, format_cost, format_sign_off, format_tokens
+from app.telegram.footer import (
+    RunStats,
+    format_cost,
+    format_elapsed,
+    format_sign_off,
+    format_tokens,
+)
 from app.telegram.identity import attribution_prefix, build_prompt
 from app.telegram.keyboards import context_label, main_menu
 from app.telegram.language import requested_language
@@ -39,7 +38,10 @@ from app.telegram.types import Inbound
 
 log = logging.getLogger("bot.runner")
 
-InteractionHook = Callable[[str, Event, "RunState"], Awaitable[None]]
+STATUS_AFTER = 8.0
+STATUS_INTERVAL = 5.0
+
+InteractionHook = Callable[[str, Interaction, "RunState"], Awaitable[None]]
 
 AUDIO_GENERATION_PROMPT = (
     "The user is asking for an audio reply. Write only the text that should be "
@@ -82,8 +84,7 @@ class Runner:
         *,
         settings: Settings,
         store: Store,
-        client: OpenCodeClient,
-        bus: EventBus,
+        backend: Backend,
         messenger: Messenger | None = None,
         on_interaction: InteractionHook | None = None,
         run_timeout: float = 900.0,
@@ -91,8 +92,7 @@ class Runner:
     ) -> None:
         self._settings = settings
         self._store = store
-        self._client = client
-        self._bus = bus
+        self._backend = backend
         self.messenger: Messenger | None = messenger
         self._on_interaction = on_interaction
         self._run_timeout = run_timeout
@@ -185,7 +185,7 @@ class Runner:
             message.chat_id, message.thread_id, message.chat_type, message.chat_title
         )
         title = (message.chat_title or message.display_name or "conversation")[:60]
-        session_id = await self._client.create_session(
+        session_id = await self._backend.create_session(
             title=title, agent=conversation.agent, model=conversation.model
         )
         self._store.bind_session(
@@ -213,11 +213,12 @@ class Runner:
             # A recreated agent server forgets its sessions while our binding
             # still points at them: verify before prompting, then heal silently.
             try:
-                await self._client.session(session_id)
+                if not await self._backend.session_exists(session_id):
+                    raise SessionGone()
             except SessionGone:
                 self._store.clear_session(message.chat_id, message.thread_id)
                 session_id = None
-            except OpenCodeError:
+            except HarnessError:
                 pass
         if not session_id:
             session_id, created = await self.new_session(message, message.user_id)
@@ -280,36 +281,50 @@ class Runner:
         typing_task = asyncio.create_task(
             self._typing_loop(message, editor, typing_stop), name=f"typing:{key}"
         )
+        status_task = asyncio.create_task(
+            self._status_loop(editor, started_at, typing_stop), name=f"status:{key}"
+        )
 
         try:
             await editor.start()
+            generated: str | None = None
             if audio_requested and speak:
                 # Do not hand an audio request to the coding agent: it reaches
                 # for tools, builds a TTS script and asks for a phrase. Transient
-                # generation returns the words to speak instead.
-                answer = await self._generate_audio_text(
-                    session_id, job.trigger.text, audio_language
-                )
-                editor.replace(answer)
-            else:
-                events = self._bus.subscribe(session_id)
+                # generation returns the words to speak instead. Harnesses
+                # without that endpoint answer normally and get spoken after.
                 try:
-                    await self._client.prompt(
-                        session_id,
-                        prompt,
-                        files=job.files,
-                        metadata={
-                            "telegram": {
-                                "chat_id": message.chat_id,
-                                "thread_id": message.thread_id,
-                                "user_id": message.user_id,
-                                "update_id": message.update_id,
-                            }
-                        },
+                    generated = await self._generate_audio_text(
+                        session_id, job.trigger.text, audio_language
                     )
-                    await self._consume(events, editor, state)
-                finally:
-                    self._bus.unsubscribe(session_id)
+                except Unsupported:
+                    generated = None
+            if generated is not None:
+                editor.replace(generated)
+            else:
+                async def stream(delta: str) -> None:
+                    editor.append(delta)
+                    await editor.flush()
+
+                outcome = await self._backend.run(
+                    session_id,
+                    prompt,
+                    files=job.files,
+                    metadata={
+                        "telegram": {
+                            "chat_id": message.chat_id,
+                            "thread_id": message.thread_id,
+                            "user_id": message.user_id,
+                            "update_id": message.update_id,
+                        }
+                    },
+                    on_delta=stream,
+                    on_interaction=self._interaction_hook(state),
+                )
+                if outcome.text and not editor.text.strip():
+                    editor.append(outcome.text)
+                if outcome.error and not editor.text.strip():
+                    raise HarnessError(outcome.error)
 
             if filter_audio_meta:
                 editor.replace(strip_audio_meta(editor.text))
@@ -354,12 +369,13 @@ class Runner:
             status, error_kind = "failed", "unavailable"
             log.warning("agent server unavailable: %s", type(exc).__name__)
             await editor.finish("The agent server is unreachable right now. Nothing was lost; retry in a moment.")
-        except OpenCodeError:
+        except HarnessError:
             status, error_kind = "failed", "open_code_error"
             await editor.finish("The agent server rejected that request.")
         finally:
             typing_stop.set()
             typing_task.cancel()
+            status_task.cancel()
             if turn_id:
                 self._store.finish_turn(
                     turn_id,
@@ -386,10 +402,30 @@ class Runner:
             AUDIO_GENERATION_PROMPT.format(request=request, language=spoken_language),
             retry,
         ):
-            text = await self._client.generate(session_id, prompt)
+            text = await self._backend.generate(session_id, prompt)
             if text.strip():
                 return text
         return fallback
+
+    async def _status_loop(
+        self, editor: StreamEditor, started_at: float, stop: asyncio.Event
+    ) -> None:
+        """Show elapsed time in the answer's place until real text streams in."""
+
+        while not stop.is_set():
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=STATUS_INTERVAL)
+            except TimeoutError:
+                pass
+            if stop.is_set():
+                return
+            elapsed = time.monotonic() - started_at
+            if elapsed < STATUS_AFTER or editor.text.strip():
+                continue
+            try:
+                await editor.status(f"⏳ Working… {format_elapsed(elapsed)}")
+            except Exception as exc:  # never fail a run because of a status edit
+                log.debug("status bubble failed: %s", type(exc).__name__)
 
     async def _typing_loop(
         self, message: Inbound, editor: StreamEditor, stop: asyncio.Event
@@ -446,35 +482,21 @@ class Runner:
         except Exception as exc:  # a failed voice note must never fail the turn
             log.warning("audio reply delivery failed: %s", type(exc).__name__)
 
-    async def _consume(
-        self, events: asyncio.Queue[Event], editor: StreamEditor, state: RunState
-    ) -> None:
-        while True:
-            try:
-                event = await asyncio.wait_for(events.get(), timeout=self._run_timeout)
-            except TimeoutError:
-                log.warning("run timed out", extra={"session_id": state.session_id})
-                editor.append("\n\n[timed out waiting for the agent]")
-                return
+    def _interaction_hook(self, state: RunState) -> Any:
+        """Bind the run state to the app's interaction handler for this turn."""
 
-            if (delta := event.text_delta) is not None:
-                editor.append(delta)
-                await editor.flush()
-                continue
-            if event.kind in (PERMISSION_ASKED, FORM_CREATED) and self._on_interaction is not None:
-                await self._on_interaction(event.kind, event, state)
-                continue
-            if event.kind in EXECUTION_DONE:
-                if event.kind != "session.idle":
-                    text = event.text
-                    if text and not editor.text.strip():
-                        editor.append(text)
-                return
+        if self._on_interaction is None:
+            return None
+
+        async def hook(kind: str, interaction: Interaction) -> None:
+            await self._on_interaction(kind, interaction, state)
+
+        return hook
 
     async def _last_error(self, session_id: str) -> str | None:
         try:
-            usage = await self._client.context_usage(session_id)
-        except OpenCodeError:
+            usage = await self._backend.context_usage(session_id)
+        except HarnessError:
             return None
         error = usage.get("error")
         return f"⚠️ {error}" if isinstance(error, str) and error else None
@@ -600,15 +622,15 @@ class Runner:
         # used, at 0 of its window, instead of "server default" with no numbers.
         if not model:
             try:
-                default = await self._client.default_model()
-            except OpenCodeError:
+                default = await self._backend.default_model()
+            except HarnessError:
                 default = {}
             provider = provider or default.get("providerID")
             model = model or default.get("modelID")
         if limit is None:
             try:
-                limit = await self._client.context_limit(provider, model)
-            except OpenCodeError:
+                limit = await self._backend.context_limit(provider, model)
+            except HarnessError:
                 limit = None
 
         parts = [model or "server default"]
@@ -633,14 +655,14 @@ class Runner:
 
         info: dict[str, object] = {}
         try:
-            info = await self._client.session(session_id)
-        except OpenCodeError:
+            info = await self._backend.session(session_id)
+        except HarnessError:
             log.debug("session info unavailable for footer")
 
         usage: dict[str, object] = {}
         try:
-            usage = await self._client.context_usage(session_id)
-        except OpenCodeError:
+            usage = await self._backend.context_usage(session_id)
+        except HarnessError:
             log.debug("context usage unavailable for footer")
 
         used = usage.get("used_tokens") if isinstance(usage.get("used_tokens"), int) else None
@@ -662,16 +684,16 @@ class Runner:
             # Sessions created without an explicit model do not record one, so
             # ask the server which model it would use and show that.
             try:
-                default = await self._client.default_model()
-            except OpenCodeError:
+                default = await self._backend.default_model()
+            except HarnessError:
                 default = {}
             provider = provider or default.get("providerID")
             model_id = model_id or default.get("modelID") or default.get("id")
 
         limit = None
         try:
-            limit = await self._client.context_limit(provider, model_id)
-        except OpenCodeError:
+            limit = await self._backend.context_limit(provider, model_id)
+        except HarnessError:
             log.debug("context limit unavailable for footer")
 
         cost = info.get("cost")
@@ -697,7 +719,7 @@ class Runner:
         )
         if not session_id:
             return False
-        interrupted = await self._client.interrupt(session_id)
+        interrupted = await self._backend.interrupt(session_id)
         self._store.cancel_pending_for_session(session_id)
         return interrupted
 

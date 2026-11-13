@@ -5,10 +5,11 @@ from pathlib import Path
 import httpx
 import pytest
 
+from app.backends.opencode.backend import OpenCodeBackend
+from app.backends.opencode.client import OpenCodeClient
+from app.backends.opencode.events import EventBus
 from app.config import Settings
 from app.health import HealthState
-from app.opencode.client import OpenCodeClient
-from app.opencode.events import EventBus
 from app.store import Store
 from app.telegram.runner import Runner
 from tests.fakes.opencode import FakeOpenCode
@@ -63,10 +64,15 @@ def messenger() -> FakeMessenger:
 
 
 @pytest.fixture
+def backend(client: OpenCodeClient, bus: EventBus) -> OpenCodeBackend:
+    return OpenCodeBackend(client, bus=bus)
+
+
+@pytest.fixture
 def runner(
-    settings: Settings, store: Store, client: OpenCodeClient, bus: EventBus, messenger: FakeMessenger
+    settings: Settings, store: Store, backend: OpenCodeBackend, messenger: FakeMessenger
 ) -> Runner:
-    return Runner(settings=settings, store=store, client=client, bus=bus, messenger=messenger)
+    return Runner(settings=settings, store=store, backend=backend, messenger=messenger)
 
 
 @pytest.fixture

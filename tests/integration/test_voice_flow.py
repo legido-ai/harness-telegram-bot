@@ -32,12 +32,12 @@ class FakeBot:
 
 
 @pytest.fixture
-def voice_app(settings, store, client, bus, health, messenger):
-    runner = Runner(settings=settings, store=store, client=client, bus=bus, messenger=messenger)
+def voice_app(settings, store, backend, health, messenger):
+    runner = Runner(settings=settings, store=store, backend=backend, messenger=messenger)
     app = BotApp(
         settings=settings,
         store=store,
-        client=client,
+        backend=backend,
         runner=runner,
         state=health,
         stt=FakeStt(),
@@ -92,12 +92,12 @@ async def test_group_voice_needs_a_mention(voice_app, fake_server) -> None:
 
 
 async def test_transcription_failure_is_reported_without_a_prompt(
-    settings, store, client, bus, health, messenger, fake_server
+    settings, store, backend, health, messenger, fake_server
 ) -> None:
     stt = FakeStt(error=SttRejected())
-    runner = Runner(settings=settings, store=store, client=client, bus=bus, messenger=messenger)
+    runner = Runner(settings=settings, store=store, backend=backend, messenger=messenger)
     app = BotApp(
-        settings=settings, store=store, client=client, runner=runner, state=health, stt=stt
+        settings=settings, store=store, backend=backend, runner=runner, state=health, stt=stt
     )
     app.bot_id = BOT_ID
     app.bot_username = BOT_USERNAME
@@ -109,10 +109,10 @@ async def test_transcription_failure_is_reported_without_a_prompt(
     assert fake_server.prompts == []
 
 
-async def test_voice_recognition_is_configurable(settings, store, client, bus, health, messenger, fake_server) -> None:
-    runner = Runner(settings=settings, store=store, client=client, bus=bus, messenger=messenger)
+async def test_voice_recognition_is_configurable(settings, store, backend, health, messenger, fake_server) -> None:
+    runner = Runner(settings=settings, store=store, backend=backend, messenger=messenger)
     app = BotApp(
-        settings=settings, store=store, client=client, runner=runner, state=health, stt=None
+        settings=settings, store=store, backend=backend, runner=runner, state=health, stt=None
     )
     app.bot_id = BOT_ID
     app.bot_username = BOT_USERNAME
@@ -125,13 +125,13 @@ async def test_voice_recognition_is_configurable(settings, store, client, bus, h
 
 
 async def test_tts_modes_control_audio_replies(
-    settings, store, client, bus, health, messenger, fake_server
+    settings, store, backend, health, messenger, fake_server
 ) -> None:
     tts = FakeTts()
     runner = Runner(
-        settings=settings, store=store, client=client, bus=bus, messenger=messenger, tts=tts
+        settings=settings, store=store, backend=backend, messenger=messenger, tts=tts
     )
-    app = BotApp(settings=settings, store=store, client=client, runner=runner, state=health)
+    app = BotApp(settings=settings, store=store, backend=backend, runner=runner, state=health)
     app.bot_id = BOT_ID
     app.bot_username = BOT_USERNAME
     app.messenger = messenger
@@ -147,16 +147,16 @@ async def test_tts_modes_control_audio_replies(
 
 
 async def test_voice_reply_is_text_only_by_default(
-    settings, store, client, bus, health, messenger, fake_server
+    settings, store, backend, health, messenger, fake_server
 ) -> None:
     tts = FakeTts()
     runner = Runner(
-        settings=settings, store=store, client=client, bus=bus, messenger=messenger, tts=tts
+        settings=settings, store=store, backend=backend, messenger=messenger, tts=tts
     )
     app = BotApp(
         settings=settings,
         store=store,
-        client=client,
+        backend=backend,
         runner=runner,
         state=health,
         stt=FakeStt(),
@@ -176,16 +176,16 @@ async def test_voice_reply_is_text_only_by_default(
 
 
 async def test_spanish_audio_request_uses_the_spanish_voice(
-    settings, store, client, bus, health, messenger, fake_server
+    settings, store, backend, health, messenger, fake_server
 ) -> None:
     fake_server.generate_text = "Hola Javier, esta es una prueba en castellano."
     tts = FakeTts()
     stt = FakeStt(text="responde en castellano")
     runner = Runner(
-        settings=settings, store=store, client=client, bus=bus, messenger=messenger, tts=tts
+        settings=settings, store=store, backend=backend, messenger=messenger, tts=tts
     )
     app = BotApp(
-        settings=settings, store=store, client=client, runner=runner, state=health, stt=stt
+        settings=settings, store=store, backend=backend, runner=runner, state=health, stt=stt
     )
     app.bot_id = BOT_ID
     app.bot_username = BOT_USERNAME
@@ -199,16 +199,16 @@ async def test_spanish_audio_request_uses_the_spanish_voice(
 
 
 async def test_english_audio_request_uses_the_english_voice(
-    settings, store, client, bus, health, messenger, fake_server
+    settings, store, backend, health, messenger, fake_server
 ) -> None:
     fake_server.generate_text = "Hello Javier, this is an English test."
     tts = FakeTts()
     stt = FakeStt(text="responde en inglés")
     runner = Runner(
-        settings=settings, store=store, client=client, bus=bus, messenger=messenger, tts=tts
+        settings=settings, store=store, backend=backend, messenger=messenger, tts=tts
     )
     app = BotApp(
-        settings=settings, store=store, client=client, runner=runner, state=health, stt=stt
+        settings=settings, store=store, backend=backend, runner=runner, state=health, stt=stt
     )
     app.bot_id = BOT_ID
     app.bot_username = BOT_USERNAME
@@ -222,16 +222,16 @@ async def test_english_audio_request_uses_the_english_voice(
 
 
 async def test_audio_request_generates_the_phrase_instead_of_using_tools(
-    settings, store, client, bus, health, messenger, fake_server
+    settings, store, backend, health, messenger, fake_server
 ) -> None:
     fake_server.generate_text = '"Small steps still move you forward."'
     tts = FakeTts()
     stt = FakeStt(text="genera un audio corto con una frase.")
     runner = Runner(
-        settings=settings, store=store, client=client, bus=bus, messenger=messenger, tts=tts
+        settings=settings, store=store, backend=backend, messenger=messenger, tts=tts
     )
     app = BotApp(
-        settings=settings, store=store, client=client, runner=runner, state=health, stt=stt
+        settings=settings, store=store, backend=backend, runner=runner, state=health, stt=stt
     )
     app.bot_id = BOT_ID
     app.bot_username = BOT_USERNAME
@@ -251,16 +251,16 @@ async def test_audio_request_generates_the_phrase_instead_of_using_tools(
 
 
 async def test_tts_off_keeps_voice_answers_silent(
-    settings, store, client, bus, health, messenger, fake_server
+    settings, store, backend, health, messenger, fake_server
 ) -> None:
     tts = FakeTts()
     runner = Runner(
-        settings=settings, store=store, client=client, bus=bus, messenger=messenger, tts=tts
+        settings=settings, store=store, backend=backend, messenger=messenger, tts=tts
     )
     app = BotApp(
         settings=settings,
         store=store,
-        client=client,
+        backend=backend,
         runner=runner,
         state=health,
         stt=FakeStt(),
@@ -278,15 +278,15 @@ async def test_tts_off_keeps_voice_answers_silent(
 
 
 async def test_auto_speaks_voice_requests_only(
-    settings, store, client, bus, health, messenger, fake_server
+    settings, store, backend, health, messenger, fake_server
 ) -> None:
     tts = FakeTts()
     stt = FakeStt()
     runner = Runner(
-        settings=settings, store=store, client=client, bus=bus, messenger=messenger, tts=tts
+        settings=settings, store=store, backend=backend, messenger=messenger, tts=tts
     )
     app = BotApp(
-        settings=settings, store=store, client=client, runner=runner, state=health, stt=stt
+        settings=settings, store=store, backend=backend, runner=runner, state=health, stt=stt
     )
     app.bot_id = BOT_ID
     app.bot_username = BOT_USERNAME
@@ -305,13 +305,13 @@ async def test_auto_speaks_voice_requests_only(
 
 
 async def test_off_sends_no_audio(
-    settings, store, client, bus, health, messenger, fake_server
+    settings, store, backend, health, messenger, fake_server
 ) -> None:
     tts = FakeTts()
     runner = Runner(
-        settings=settings, store=store, client=client, bus=bus, messenger=messenger, tts=tts
+        settings=settings, store=store, backend=backend, messenger=messenger, tts=tts
     )
-    app = BotApp(settings=settings, store=store, client=client, runner=runner, state=health)
+    app = BotApp(settings=settings, store=store, backend=backend, runner=runner, state=health)
     app.bot_id = BOT_ID
     app.bot_username = BOT_USERNAME
     app.messenger = messenger
@@ -324,17 +324,16 @@ async def test_off_sends_no_audio(
 
 
 async def test_tts_failure_does_not_lose_the_answer(
-    settings, store, client, bus, health, messenger, fake_server
+    settings, store, backend, health, messenger, fake_server
 ) -> None:
     runner = Runner(
         settings=settings,
         store=store,
-        client=client,
-        bus=bus,
+        backend=backend,
         messenger=messenger,
         tts=FakeTts(error=TtsFailed()),
     )
-    app = BotApp(settings=settings, store=store, client=client, runner=runner, state=health)
+    app = BotApp(settings=settings, store=store, backend=backend, runner=runner, state=health)
     app.bot_id = BOT_ID
     app.bot_username = BOT_USERNAME
     app.messenger = messenger
@@ -347,10 +346,10 @@ async def test_tts_failure_does_not_lose_the_answer(
 
 
 async def test_status_and_tts_command_show_the_mode(
-    settings, store, client, bus, health, messenger
+    settings, store, backend, health, messenger
 ) -> None:
-    runner = Runner(settings=settings, store=store, client=client, bus=bus, messenger=messenger)
-    app = BotApp(settings=settings, store=store, client=client, runner=runner, state=health)
+    runner = Runner(settings=settings, store=store, backend=backend, messenger=messenger)
+    app = BotApp(settings=settings, store=store, backend=backend, runner=runner, state=health)
     app.bot_id = BOT_ID
     app.bot_username = BOT_USERNAME
     app.messenger = messenger

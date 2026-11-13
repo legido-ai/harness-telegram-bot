@@ -27,8 +27,8 @@ class FakeBot:
 
 
 @pytest.fixture
-def bot_app(settings, store, client, runner, health, messenger) -> BotApp:
-    app = BotApp(settings=settings, store=store, client=client, runner=runner, state=health)
+def bot_app(settings, store, backend, runner, health, messenger) -> BotApp:
+    app = BotApp(settings=settings, store=store, backend=backend, runner=runner, state=health)
     app.bot_id = BOT_ID
     app.bot_username = BOT_USERNAME
     app.messenger = messenger

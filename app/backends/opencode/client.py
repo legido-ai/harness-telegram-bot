@@ -14,7 +14,7 @@ from typing import Any
 
 import httpx
 
-from app.opencode.errors import AuthError, Busy, InvalidRequest, SessionGone, Unavailable
+from app.backends.errors import AuthError, Busy, InvalidRequest, SessionGone, Unavailable
 
 PERMISSION_DECISIONS = ("once", "always", "reject")
 

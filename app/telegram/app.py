@@ -21,11 +21,10 @@ from telegram.ext import (
     filters,
 )
 
+from app.backends.base import FORM_CREATED, PERMISSION_ASKED, Backend, Interaction
+from app.backends.errors import HarnessError
 from app.config import Settings
 from app.health import HealthState
-from app.opencode.client import PERMISSION_DECISIONS, OpenCodeClient
-from app.opencode.errors import OpenCodeError
-from app.opencode.events import FORM_CREATED, PERMISSION_ASKED, Event
 from app.speech.stt import SttClient, SttError
 from app.store import TTS_MODES, Store
 from app.telegram import commands, keyboards, voice
@@ -47,7 +46,7 @@ class BotApp:
         *,
         settings: Settings,
         store: Store,
-        client: OpenCodeClient,
+        backend: Backend,
         runner: Runner,
         state: HealthState,
         messenger: Messenger | None = None,
@@ -55,7 +54,7 @@ class BotApp:
     ) -> None:
         self.settings = settings
         self.store = store
-        self.client = client
+        self.backend = backend
         self.runner = runner
         self.state = state
         self.stt = stt
@@ -373,7 +372,7 @@ class BotApp:
     async def _cmd_abort(self, message: Inbound, argument: str) -> None:
         try:
             stopped = await self.runner.abort(message)
-        except OpenCodeError as exc:
+        except HarnessError as exc:
             await self._reply(message, exc.user_message)
             return
         await self._reply(
@@ -433,14 +432,19 @@ class BotApp:
 
     async def _cmd_sessions(self, message: Inbound, argument: str) -> None:
         bindings = self.store.list_bindings(message.chat_id, message.thread_id, limit=10)
-        rows = [(b.session_id, b.title or "untitled", b.active) for b in bindings]
+        rows = []
+        for binding in bindings:
+            short = await self.backend.describe(binding.session_id)
+            rows.append((short, binding.title or "untitled", binding.active))
         text = commands.sessions_text(rows)
         keyboard = None
         if bindings:
+            entries = [
+                (self._token("s", binding.session_id, "", ""), binding.title or "untitled")
+                for binding in bindings
+            ]
             keyboard = keyboards.sessions_keyboard(
-                message.chat_id,
-                message.thread_id,
-                [(b.session_id, b.title or "untitled") for b in bindings],
+                message.chat_id, message.thread_id, entries
             )
         await self._reply(message, text, keyboard)
 
@@ -457,9 +461,9 @@ class BotApp:
     async def _cmd_model(self, message: Inbound, argument: str) -> None:
         session_id, _ = await self.runner.ensure_session(message)
         try:
-            models = await self.client.models()
-            providers = await self.client.providers()
-        except OpenCodeError as exc:
+            models = await self.backend.models()
+            providers = await self.backend.providers()
+        except HarnessError as exc:
             await self._reply(message, exc.user_message)
             return
 
@@ -508,8 +512,8 @@ class BotApp:
     ) -> None:
         if models is None:
             try:
-                models = await self.client.models()
-            except OpenCodeError as exc:
+                models = await self.backend.models()
+            except HarnessError as exc:
                 await self._reply(message, exc.user_message)
                 return
         mine = [m for m in models if str(m.get("providerID")) == provider_id]
@@ -530,10 +534,16 @@ class BotApp:
         )
 
     async def _cmd_agent(self, message: Inbound, argument: str) -> None:
+        if not self.backend.supports_agents:
+            await self._reply(
+                message,
+                f"The {self.backend.name} backend has no agent modes. Use /model instead.",
+            )
+            return
         session_id, _ = await self.runner.ensure_session(message)
         try:
-            agents = await self.client.agents()
-        except OpenCodeError as exc:
+            agents = await self.backend.agents()
+        except HarnessError as exc:
             await self._reply(message, exc.user_message)
             return
         names = [str(item.get("id") or item.get("name")) for item in agents][:10]
@@ -583,7 +593,7 @@ class BotApp:
             return
         session_id, request_id, decision = parts[0], parts[1], parts[2]
         pending_id = f"permission:{request_id}"
-        if decision not in PERMISSION_DECISIONS:
+        if decision not in ("once", "always", "reject"):
             return
         accepted, pending = self.store.decide_pending(
             pending_id, message.user_id, "allowed" if decision != "reject" else "denied"
@@ -595,7 +605,7 @@ class BotApp:
                     message.callback_id or "", f"Already decided by {who}."
                 )
             return
-        await self.client.reply_permission(session_id, request_id, decision)
+        await self.backend.reply_permission(session_id, request_id, decision)
         state = "Allowed" if decision != "reject" else "Denied"
         if self.messenger:
             await self.messenger.answer_callback(message.callback_id or "", f"{state}.")
@@ -626,7 +636,7 @@ class BotApp:
             if self.messenger:
                 await self.messenger.answer_callback(message.callback_id or "", "Already answered.")
             return
-        await self.client.reply_form(session_id, form_id, {"answer": choice})
+        await self.backend.reply_form(session_id, form_id, {"answer": choice})
         if self.messenger:
             await self.messenger.answer_callback(message.callback_id or "", "Answered.")
             await self.messenger.edit_text(
@@ -645,8 +655,8 @@ class BotApp:
             return
         _, session_id, provider_id, _ = choice
         try:
-            providers = await self.client.providers()
-        except OpenCodeError as exc:
+            providers = await self.backend.providers()
+        except HarnessError as exc:
             await self._reply(message, exc.user_message)
             return
         name = next(
@@ -670,8 +680,8 @@ class BotApp:
         else:
             return
         try:
-            await self.client.set_model(session_id, provider, model_id)
-        except OpenCodeError as exc:
+            await self.backend.set_model(session_id, provider, model_id)
+        except HarnessError as exc:
             if self.messenger:
                 await self.messenger.answer_callback(message.callback_id or "", exc.user_message)
             return
@@ -704,8 +714,8 @@ class BotApp:
         else:
             return
         try:
-            await self.client.set_agent(session_id, agent)
-        except OpenCodeError as exc:
+            await self.backend.set_agent(session_id, agent)
+        except HarnessError as exc:
             if self.messenger:
                 await self.messenger.answer_callback(message.callback_id or "", exc.user_message)
             return
@@ -719,22 +729,29 @@ class BotApp:
     async def _callback_switch(self, message: Inbound, parts: list[str]) -> None:
         if len(parts) < 3:
             return
-        chat_id, thread_id, session_id = int(parts[0]), int(parts[1]), parts[2]
+        chat_id, thread_id, raw = int(parts[0]), int(parts[1]), parts[2]
         if (chat_id, thread_id) != (message.chat_id, message.thread_id):
             if self.messenger:
                 await self.messenger.answer_callback(message.callback_id or "", "Wrong conversation.")
             return
+        choice = self._choices.get(raw)
+        if choice is None:
+            if self.messenger:
+                await self.messenger.answer_callback(message.callback_id or "", "This control has expired.")
+            return
+        _, session_id, _, _ = choice
         self.store.bind_session(chat_id, thread_id, session_id, None, bound_by=message.user_id)
         await self.runner.refresh_dashboard(message)
         if self.messenger:
             await self.messenger.answer_callback(message.callback_id or "", "Switched.")
+            short = await self.backend.describe(session_id)
             await self.messenger.edit_text(
-                message.chat_id, message.message_id, f"Switched to session {session_id[-6:]}."
+                message.chat_id, message.message_id, f"Switched to session {short}."
             )
 
     # -- agent interactions ---------------------------------------------
 
-    async def on_interaction(self, kind: str, event: Event, state: RunState) -> None:
+    async def on_interaction(self, kind: str, event: Interaction, state: RunState) -> None:
         if self.messenger is None:
             return
         if kind == PERMISSION_ASKED:

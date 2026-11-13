@@ -4,8 +4,8 @@ import asyncio
 
 import httpx
 
-from app.opencode.client import OpenCodeClient
-from app.opencode.events import decode_sse_data, iter_sse
+from app.backends.opencode.client import OpenCodeClient
+from app.backends.opencode.events import decode_sse_data, iter_sse
 
 
 def _sse_transport() -> httpx.MockTransport:
@@ -45,7 +45,7 @@ def test_decode_ignores_keepalives_and_junk() -> None:
 
 
 async def test_event_bus_only_delivers_to_the_subscribed_session() -> None:
-    from app.opencode.events import Event, EventBus
+    from app.backends.opencode.events import Event, EventBus
 
     bus = EventBus()
     queue = bus.subscribe("ses_a")

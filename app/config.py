@@ -11,6 +11,7 @@ TRIGGER_POLICIES = ("mention", "all")
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
 STT_REQUEST_FORMATS = ("multipart", "json")
 TTS_PROVIDERS = ("edge", "openai", "elevenlabs")
+BACKENDS = ("opencode", "pi")
 
 
 class ConfigError(RuntimeError):
@@ -39,9 +40,18 @@ class Settings:
     allowed_user_ids: frozenset[int]
     allowed_chat_ids: frozenset[int]
     trigger: str
+    backend: str
     opencode_url: str
     opencode_username: str
     opencode_password: str
+    pi_bin: str
+    pi_provider: str
+    pi_model: str
+    pi_thinking: str
+    pi_session_dir: Path
+    workspace_dir: Path
+    pi_idle_minutes: float
+    run_timeout: int
     data_dir: Path
     health_host: str
     health_port: int
@@ -87,11 +97,15 @@ class Settings:
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
         env = os.environ if env is None else env
-        missing = [
-            name
-            for name in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_USER_IDS", "OPENCODE_SERVER_PASSWORD")
-            if not (env.get(name) or "").strip()
-        ]
+
+        backend = (env.get("BACKEND") or "opencode").strip().lower()
+        if backend not in BACKENDS:
+            raise ConfigError("BACKEND must be one of: " + ", ".join(BACKENDS))
+
+        required = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_USER_IDS"]
+        if backend == "opencode":
+            required.append("OPENCODE_SERVER_PASSWORD")
+        missing = [name for name in required if not (env.get(name) or "").strip()]
         if missing:
             raise ConfigError("missing required configuration: " + ", ".join(missing))
 
@@ -136,14 +150,37 @@ class Settings:
         }.get(provider, "alloy")
         default_model = "eleven_flash_v2_5" if provider == "elevenlabs" else "gpt-4o-mini-tts"
 
+        try:
+            pi_idle = float(env.get("PI_IDLE_MINUTES") or 30)
+        except ValueError as exc:
+            raise ConfigError("PI_IDLE_MINUTES must be a number") from exc
+        if pi_idle <= 0:
+            raise ConfigError("PI_IDLE_MINUTES must be positive")
+
+        try:
+            run_timeout = int(env.get("RUN_TIMEOUT") or 900)
+        except ValueError as exc:
+            raise ConfigError("RUN_TIMEOUT must be an integer") from exc
+        if run_timeout <= 0:
+            raise ConfigError("RUN_TIMEOUT must be positive")
+
         return cls(
             bot_token=env["TELEGRAM_BOT_TOKEN"].strip(),
             allowed_user_ids=users,
             allowed_chat_ids=chats,
             trigger=trigger,
+            backend=backend,
             opencode_url=(env.get("OPENCODE_API_URL") or "http://127.0.0.1:49374").rstrip("/"),
             opencode_username=(env.get("OPENCODE_SERVER_USERNAME") or "opencode").strip(),
-            opencode_password=env["OPENCODE_SERVER_PASSWORD"],
+            opencode_password=(env.get("OPENCODE_SERVER_PASSWORD") or "").strip(),
+            pi_bin=(env.get("PI_BIN") or "pi").strip(),
+            pi_provider=(env.get("PI_PROVIDER") or "opencode-go").strip(),
+            pi_model=(env.get("PI_MODEL") or "deepseek-v4.1-flash").strip(),
+            pi_thinking=(env.get("PI_THINKING") or "").strip(),
+            pi_session_dir=Path(env.get("PI_SESSION_DIR") or (Path(env.get("DATA_DIR") or "/data") / "sessions")),
+            workspace_dir=Path(env.get("WORKSPACE_DIR") or "/workspace"),
+            pi_idle_minutes=pi_idle,
+            run_timeout=run_timeout,
             data_dir=Path(env.get("DATA_DIR") or "/data"),
             health_host=(env.get("HEALTH_HOST") or "127.0.0.1").strip(),
             health_port=port,

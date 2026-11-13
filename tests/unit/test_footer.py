@@ -4,6 +4,7 @@ from app.telegram.footer import (
     RunStats,
     format_cost,
     format_duration,
+    format_elapsed,
     format_footer,
     format_sign_off,
     format_tokens,
@@ -26,7 +27,17 @@ def test_cost_precision_scales_with_size() -> None:
 
 def test_duration_is_human() -> None:
     assert format_duration(12.4) == "12s"
-    assert format_duration(75) == "1m15s"
+    assert format_duration(59) == "59s"
+    assert format_duration(60) == "1m 00s"
+    assert format_duration(75) == "1m 15s"
+    assert format_duration(298) == "4m 58s"
+    assert format_duration(3600) == "1h 00m 00s"
+    assert format_duration(3725) == "1h 02m 05s"
+
+
+def test_elapsed_alias_matches_the_sign_off() -> None:
+    for seconds in (7, 59, 60, 298, 3725):
+        assert format_elapsed(seconds) == format_duration(seconds)
 
 
 def test_full_footer_matches_the_shape_we_promised() -> None:

@@ -17,7 +17,7 @@ from typing import Any
 
 import httpx
 
-from app.opencode.client import OpenCodeClient
+from app.backends.opencode.client import OpenCodeClient
 
 log = logging.getLogger("bot.events")
 
