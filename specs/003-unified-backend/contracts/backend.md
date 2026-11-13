@@ -1,0 +1,53 @@
+# Contract: Backend interface
+
+Every harness adapter implements this protocol. The Telegram layer must not import anything from a
+backend package; it receives a `Backend` and calls these members.
+
+```python
+class Backend(Protocol):
+    name: str                     # "opencode" | "pi"
+    supports_agents: bool         # model side-kick picker (/agent)
+    supports_permissions: bool    # Allow / Always / Deny buttons
+    supports_forms: bool          # option buttons for agent questions
+    supports_images: bool         # image attachments in a prompt
+
+    async def start(self) -> None: ...
+    async def aclose(self) -> None: ...
+
+    async def create_session(self, title: str | None, *, agent: str | None,
+                             model: dict[str, str] | None) -> str: ...
+    async def session_exists(self, ref: str) -> bool: ...
+    async def sessions(self, limit: int = 10) -> list[SessionRef]: ...
+
+    async def run(self, ref: str, prompt: str, *,
+                  files: Sequence[dict[str, str]] | None,
+                  metadata: dict[str, Any] | None,
+                  on_delta: Callable[[str], None] | None,
+                  on_interaction: InteractionHook | None) -> RunOutcome: ...
+
+    async def interrupt(self, ref: str) -> bool: ...
+
+    async def models(self) -> list[ModelOption]: ...
+    async def agents(self) -> list[AgentOption]: ...
+    async def default_model(self) -> dict[str, str] | None: ...
+    async def set_model(self, ref: str, provider: str, model: str) -> None: ...
+    async def set_agent(self, ref: str, agent: str) -> None: ...
+
+    async def stats(self, ref: str) -> SessionStats: ...
+    async def generate(self, ref: str, prompt: str) -> str: ...
+
+    async def reply_permission(self, ref: str, request_id: str, decision: str) -> None: ...
+    async def reply_form(self, ref: str, form_id: str, answer: dict[str, Any]) -> None: ...
+```
+
+## Guarantees
+
+- `run` returns only when the turn is finished (answer text or error). Streaming happens through
+  `on_delta`; the adapter owns its transport (SSE, child-process stdout).
+- `run` raises `Busy` when the harness is already running in that session, `SessionGone` when the
+  session vanished, `Unavailable` when the harness is unreachable, `Unsupported` for capabilities
+  flagged `False`.
+- `ref` is opaque: OpenCode returns its session id, Pi returns the session file path. The store never
+  parses it.
+- `stats` degrades quietly: missing numbers are `None`, never an exception (except `Unavailable`).
+- No adapter logs prompt text, credentials or file contents.
