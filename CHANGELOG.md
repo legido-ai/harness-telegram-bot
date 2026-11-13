@@ -30,6 +30,8 @@ to tell work from a hang was to ask — which steers and closes the turn.
 - The model button names the model the turn will actually use (`🧠 go/flash`)
   instead of the generic `🧠 Model` when no explicit pick was made.
 
+Validated 2026-11-13 on `@legido_opencode2_bot` from Telegram Web.
+
 ## [0.3.0] — 2026-11-13
 
 The project becomes `harness-telegram-bot`: one Telegram surface for two coding
