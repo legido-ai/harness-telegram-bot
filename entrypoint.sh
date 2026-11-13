@@ -11,6 +11,12 @@ if [ -n "${PI_PROVIDER:-}" ] && [ -n "${PI_API_KEY_ENV:-}" ]; then
     : "${PI_MODEL_CONTEXT:=262144}"
     : "${PI_MODEL_MAX_TOKENS:=8192}"
 
+    # Docker does not always give the process a HOME; the Pi CLI needs one.
+    if [ -z "${HOME:-}" ]; then
+        HOME=/home/appuser
+        export HOME
+    fi
+
     CONFIG_DIR="${HOME}/.pi/agent"
     mkdir -p "$CONFIG_DIR" "${PI_SESSION_DIR:-${DATA_DIR:-/data}/sessions}"
 
