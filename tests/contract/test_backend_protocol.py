@@ -76,3 +76,23 @@ def test_capabilities_are_declared_not_guessed(tmp_path) -> None:
     flags = {name: (b.supports_agents, b.supports_permissions, b.supports_forms) for name, b in _built(tmp_path)}
     assert flags["opencode"] == (True, True, True)
     assert flags["pi"] == (False, False, False)
+
+
+async def test_tool_activity_reaches_the_hook() -> None:
+    """The status line needs to know which tool is running, not just that it is."""
+
+    bus = EventBus()
+    server = FakeOpenCode(bus=bus)
+    server.tool_calls = ["shell"]
+    client = OpenCodeClient("http://fake.local", "pw", transport=httpx.MockTransport(server.handler))
+    backend = OpenCodeBackend(client, bus=bus)
+
+    seen: list[str | None] = []
+
+    async def on_activity(label: str | None) -> None:
+        seen.append(label)
+
+    await backend.run("ses_activity", "go", on_activity=on_activity)
+
+    assert "shell" in seen
+    assert seen[-1] is None, "the label must clear when the tool finishes"

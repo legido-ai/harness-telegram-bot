@@ -77,6 +77,7 @@ class StreamEditor:
         self._markdown = markdown
         self._defer = defer_until_finish
         self._buffer = ""
+        self._status = ""
         self._sent: list[str] = []
         self._message_ids: list[int] = []
         self._last_edit = 0.0
@@ -98,8 +99,26 @@ class StreamEditor:
 
         self._buffer = text
 
+    def set_status(self, text: str) -> None:
+        """Hold a live status line to show with the answer (``""`` clears it)."""
+
+        self._status = text
+
+    def _body(self) -> str:
+        """The answer plus the live status line, as one edit would show it.
+
+        The status rides *under* the answer rather than in a second bubble: a
+        turn that spends minutes in tool calls keeps the one message it already
+        has and still visibly moves.
+        """
+
+        body = self._buffer.strip()
+        if not self._status:
+            return body
+        return f"{body}\n\n{self._status}" if body else self._status
+
     def _compose(self, index: int) -> str:
-        chunks = split_message(self._buffer)
+        chunks = split_message(self._body())
         if not chunks:
             return ""
         chunk = chunks[min(index, len(chunks) - 1)]
@@ -122,29 +141,43 @@ class StreamEditor:
         self._last_edit = self._now()
 
     async def status(self, text: str) -> None:
-        """Show a status line in the answer's place until real text arrives.
+        """Keep a live status line in the answer's own message.
 
-        The bubble is the same message the answer will replace, so the chat
-        never accumulates scaffolding.
+        Before any text exists the bubble *is* the status. Afterwards the same
+        message keeps the streamed answer and the status becomes a trailing
+        line, so a long tool-heavy turn is never indistinguishable from a dead
+        bot. ``finish()`` clears it.
         """
 
-        if self._defer or self._buffer.strip():
+        if self._defer:
             return
+        self.set_status(text)
         if not self._message_ids:
+            rendered = self._compose(0)
+            if not rendered:
+                return
             message_id = await self._send(
                 self._chat_id,
-                text,
+                rendered,
                 thread_id=self._thread_id,
                 reply_to=self._reply_to,
-                markdown=False,
+                markdown=self._markdown,
             )
             self._message_ids.append(message_id)
-            self._sent.append(text)
+            self._sent.append(rendered)
         else:
-            if not self._due() or self._sent[0] == text:
+            # A long answer spans several messages; the status belongs to the
+            # last one, where the reader is looking.
+            last = len(self._message_ids) - 1
+            rendered = self._compose(last)
+            if not rendered or self._sent[last] == rendered:
                 return
-            await self._edit(self._chat_id, self._message_ids[0], text, markdown=False)
-            self._sent[0] = text
+            if not self._due():
+                return
+            await self._edit(
+                self._chat_id, self._message_ids[last], rendered, markdown=self._markdown
+            )
+            self._sent[last] = rendered
         self._last_edit = self._now()
 
     async def flush(self, *, force: bool = False) -> None:
@@ -156,10 +189,11 @@ class StreamEditor:
         # is nothing to coalesce.
         if not force and self._message_ids and not self._due():
             return
-        if not self._buffer.strip() and not self._message_ids:
+        body = self._body()
+        if not body.strip() and not self._message_ids:
             return
 
-        chunks = split_message(self._buffer) or [""]
+        chunks = split_message(body) or [""]
         for index, chunk in enumerate(chunks):
             rendered = f"{self._prefix}\n{chunk}" if index == 0 and self._prefix else chunk
             if index < len(self._message_ids):
@@ -182,6 +216,7 @@ class StreamEditor:
         self._last_edit = self._now()
 
     async def finish(self, footer: str = "") -> None:
+        self._status = ""
         if not self._message_ids and not self._buffer.strip():
             self._buffer = "…"
         if footer:

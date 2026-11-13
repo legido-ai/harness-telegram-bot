@@ -175,6 +175,7 @@ class PiBackend:
         metadata: dict[str, Any] | None = None,
         on_delta: Any = None,
         on_interaction: Any = None,
+        on_activity: Any = None,
     ) -> RunOutcome:
         node = await self._proc(ref)
         images = self._images(files)

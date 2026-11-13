@@ -96,3 +96,53 @@ async def test_editor_prefixes_attribution_once() -> None:
     editor.append("answer")
     await editor.flush(force=True)
     assert messenger.last_text.startswith("Ana:\nanswer")
+
+
+async def test_status_line_rides_under_the_answer() -> None:
+    messenger = FakeMessenger()
+    clock = {"now": 0.0}
+    editor = StreamEditor(
+        messenger.send_text,
+        messenger.edit_text,
+        chat_id=1,
+        min_interval=1.0,
+        markdown=True,
+        now=lambda: clock["now"],
+    )
+    await editor.start()
+    editor.append("I'll investigate the deployment first.")
+    await editor.flush(force=True)
+
+    clock["now"] += 5.0
+    await editor.status("⏳ Working… 12s · shell")
+    assert "I'll investigate the deployment first." in messenger.last_text
+    assert "Working… 12s · shell" in messenger.last_text
+
+    # The counter keeps moving even though the answer itself stopped growing.
+    clock["now"] += 5.0
+    await editor.status("⏳ Working… 17s · shell")
+    assert "Working… 17s" in messenger.last_text
+    assert "I'll investigate the deployment first." in messenger.last_text
+
+    # No trailing status in the finished answer.
+    clock["now"] += 5.0
+    await editor.finish()
+    assert "Working" not in messenger.last_text
+    assert "I'll investigate the deployment first." in messenger.last_text
+
+
+async def test_status_before_any_text_is_the_whole_bubble() -> None:
+    messenger = FakeMessenger()
+    editor = StreamEditor(
+        messenger.send_text, messenger.edit_text, chat_id=1, min_interval=0.0, now=lambda: 0.0
+    )
+    await editor.start()
+    await editor.status("⏳ Working… 9s")
+
+    assert len(messenger.sent) == 1
+    assert messenger.sent[0].text == "⏳ Working… 9s"
+
+    editor.append("done")
+    await editor.flush(force=True)
+    assert "done" in messenger.last_text
+    assert "Working" in messenger.last_text  # still running until finish()

@@ -28,6 +28,8 @@ class FakeOpenCode:
         self.fail_prompt: int | None = None
         self.publish_on_prompt = True
         self.permission_request: tuple[str, str] | None = None
+        self.tool_calls: list[str] = []
+        self.gate: asyncio.Event | None = None
         self.answer_error: str | None = None
         self.session_stats: dict[str, Any] = {
             "cost": 0.03,
@@ -61,9 +63,18 @@ class FakeOpenCode:
             request_id, tool = self.permission_request
             self.emit("permission.asked", session_id, requestID=request_id, tool=tool)
             await asyncio.sleep(0)
+        for name in self.tool_calls:
+            self.emit("session.tool.input.started", session_id, id="call_1", name=name)
+            await asyncio.sleep(0)
+            self.emit("session.tool.success", session_id, id="call_1")
+            await asyncio.sleep(0)
         for chunk in self.script:
             self.emit("session.text.delta", session_id, delta=chunk)
             await asyncio.sleep(0)
+        if self.gate is not None:
+            # A turn that keeps working after it has said something: the case
+            # where the chat used to look dead.
+            await self.gate.wait()
         self.emit("session.text.ended", session_id)
         self.emit("session.execution.succeeded", session_id)
 

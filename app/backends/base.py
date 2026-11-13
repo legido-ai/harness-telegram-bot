@@ -48,6 +48,7 @@ class RunOutcome:
 
 DeltaSink = Callable[[str], Awaitable[None]]
 InteractionHook = Callable[[str, Interaction], Awaitable[None]]
+ActivityHook = Callable[[str | None], Awaitable[None]]
 
 
 @runtime_checkable
@@ -91,6 +92,7 @@ class Backend(Protocol):
         metadata: dict[str, Any] | None = None,
         on_delta: DeltaSink | None = None,
         on_interaction: InteractionHook | None = None,
+        on_activity: ActivityHook | None = None,
     ) -> RunOutcome: ...
 
     async def interrupt(self, ref: str) -> bool: ...
@@ -122,6 +124,7 @@ class Backend(Protocol):
 
 __all__ = [
     "AuthError",
+    "ActivityHook",
     "Backend",
     "Busy",
     "DeltaSink",

@@ -13,6 +13,8 @@ from app.backends.opencode.client import PERMISSION_DECISIONS, OpenCodeClient
 from app.backends.opencode.events import (
     EXECUTION_DONE,
     TEXT_DELTA,
+    TOOL_ENDED,
+    TOOL_STARTED,
     Event,
     EventBus,
     consume_events,
@@ -99,6 +101,7 @@ class OpenCodeBackend:
         metadata: dict[str, Any] | None = None,
         on_delta: Any = None,
         on_interaction: Any = None,
+        on_activity: Any = None,
     ) -> RunOutcome:
         events = self._bus.subscribe(ref)
         streamed = False
@@ -115,6 +118,16 @@ class OpenCodeBackend:
                     streamed = True
                     if on_delta is not None:
                         await on_delta(event.text_delta)
+                    continue
+
+                if on_activity is not None and event.kind in TOOL_ENDED:
+                    await on_activity(None)
+                    continue
+
+                if on_activity is not None and event.kind in TOOL_STARTED:
+                    name = event.tool_name
+                    if name is not None:
+                        await on_activity(name)
                     continue
 
                 if event.kind in (PERMISSION_ASKED, FORM_CREATED) and on_interaction is not None:

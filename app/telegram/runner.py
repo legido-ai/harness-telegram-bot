@@ -277,12 +277,13 @@ class Runner:
         if self.messenger is not None:
             await self.messenger.send_typing(message.chat_id, message.thread_id)
 
+        activity: dict[str, str | None] = {"label": None}
         typing_stop = asyncio.Event()
         typing_task = asyncio.create_task(
-            self._typing_loop(message, editor, typing_stop), name=f"typing:{key}"
+            self._typing_loop(message, typing_stop), name=f"typing:{key}"
         )
         status_task = asyncio.create_task(
-            self._status_loop(editor, started_at, typing_stop), name=f"status:{key}"
+            self._status_loop(editor, started_at, typing_stop, activity), name=f"status:{key}"
         )
 
         try:
@@ -306,6 +307,11 @@ class Runner:
                     editor.append(delta)
                     await editor.flush()
 
+                async def on_activity(label: str | None) -> None:
+                    # What the agent is doing right now, so the status line says
+                    # more than "still here" during a long tool run.
+                    activity["label"] = label
+
                 outcome = await self._backend.run(
                     session_id,
                     prompt,
@@ -320,6 +326,7 @@ class Runner:
                     },
                     on_delta=stream,
                     on_interaction=self._interaction_hook(state),
+                    on_activity=on_activity,
                 )
                 if outcome.text and not editor.text.strip():
                     editor.append(outcome.text)
@@ -408,9 +415,19 @@ class Runner:
         return fallback
 
     async def _status_loop(
-        self, editor: StreamEditor, started_at: float, stop: asyncio.Event
+        self,
+        editor: StreamEditor,
+        started_at: float,
+        stop: asyncio.Event,
+        activity: dict[str, str | None] | None = None,
     ) -> None:
-        """Show elapsed time in the answer's place until real text streams in."""
+        """Keep the elapsed-time line moving for the whole turn.
+
+        Before the first token this is the bubble; afterwards it rides under the
+        streamed answer. It must not stop when text appears: an agent that spends
+        minutes in tool calls sends no more text, and a frozen message is
+        indistinguishable from a dead bot.
+        """
 
         while not stop.is_set():
             try:
@@ -420,21 +437,27 @@ class Runner:
             if stop.is_set():
                 return
             elapsed = time.monotonic() - started_at
-            if elapsed < STATUS_AFTER or editor.text.strip():
+            if elapsed < STATUS_AFTER:
                 continue
+            line = f"⏳ Working… {format_elapsed(elapsed)}"
+            label = (activity or {}).get("label")
+            if label:
+                line = f"{line} · {label}"
             try:
-                await editor.status(f"⏳ Working… {format_elapsed(elapsed)}")
+                await editor.status(line)
             except Exception as exc:  # never fail a run because of a status edit
                 log.debug("status bubble failed: %s", type(exc).__name__)
 
     async def _typing_loop(
-        self, message: Inbound, editor: StreamEditor, stop: asyncio.Event
+        self, message: Inbound, stop: asyncio.Event
     ) -> None:
-        """Show 'typing…' while the agent thinks, until the first text lands."""
+        """Refresh the chat action for as long as the turn runs.
+
+        The action is the animation clients draw next to the bot's name; ending
+        it at the first token leaves the rest of a long turn silent.
+        """
 
         while not stop.is_set():
-            if editor.message_ids:
-                return
             if self.messenger is not None:
                 await self.messenger.send_typing(message.chat_id, message.thread_id)
             try:
@@ -515,7 +538,7 @@ class Runner:
             message.chat_id,
             format_sign_off(stats),
             thread_id=message.thread_id,
-            keyboard=self._keyboard_for(stats, self._model_label(message)),
+            keyboard=self._keyboard_for(stats, await self._model_label(message)),
         )
 
     async def _refresh_dashboard(
@@ -566,12 +589,26 @@ class Runner:
             model,
         )
 
-    def _model_label(self, message: Inbound) -> str | None:
+    async def _model_label(self, message: Inbound) -> str | None:
+        """Show the model a turn would use, not only an explicit choice.
+
+        Sessions created without a pick use the harness default, so the button
+        falls back to that instead of staying at the generic "Model" label.
+        """
+
         conversation = self._store.get_conversation(message.chat_id, message.thread_id)
         model = conversation.model if conversation else None
         if model:
             return f"{model['providerID']}/{model['modelID']}"
-        return None
+        try:
+            default = await self._backend.default_model()
+        except HarnessError:
+            return None
+        provider = default.get("providerID")
+        model_id = default.get("modelID") or default.get("id")
+        if not model_id:
+            return None
+        return f"{provider}/{model_id}" if provider else str(model_id)
 
     async def refresh_dashboard(self, message: Inbound) -> None:
         """Redraw the pinned card for the current binding (after /new, /switch)."""
@@ -595,7 +632,7 @@ class Runner:
             stats = await self._run_stats(
                 session_id, created=False, seconds=None, model_hint=conversation.model
             )
-        return self._keyboard_for(stats, self._model_label(message))
+        return self._keyboard_for(stats, await self._model_label(message))
 
     async def context_line(self, message: Inbound) -> str:
         """One line for the chat, mirroring the status bar of the TUI."""

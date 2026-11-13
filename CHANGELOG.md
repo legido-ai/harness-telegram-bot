@@ -3,6 +3,33 @@
 All notable changes to this project are documented here. Format follows
 Keep a Changelog; versions use semantic versioning.
 
+## [0.3.1] — 2026-11-13
+
+A tool-heavy turn no longer looks dead. Previously the only sign of life was the
+first sentence the agent streamed; after that the chat sat on a frozen message
+while `docker pull`, a deploy or a long `grep` ran for minutes, and the only way
+to tell work from a hang was to ask — which steers and closes the turn.
+
+### Fixed
+
+- The elapsed-time line is now a trailing line **inside** the answer's own
+  message and keeps updating for the whole turn (`⏳ Working… 2m 10s · shell`),
+  instead of only until the first text arrived. `finish()` removes it, so the
+  finished answer stays clean.
+- The status line names the tool the agent is using (`shell`, `edit`, …), read
+  from `session.tool.input.started`, and clears between tools.
+- The chat action ("typing…") is refreshed for the full turn rather than stopping
+  at the first bubble, so clients that animate it keep animating.
+- `status()` renders through the same Markdown→HTML path as the answer, so an
+  annotated edit no longer drops the formatting of the text it sits under.
+
+### Added
+
+- `on_activity` hook on the backend `run()` seam; the OpenCode adapter feeds it
+  `session.tool.*` events. The Pi adapter accepts it for contract parity.
+- The model button names the model the turn will actually use (`🧠 go/flash`)
+  instead of the generic `🧠 Model` when no explicit pick was made.
+
 ## [0.3.0] — 2026-11-13
 
 The project becomes `harness-telegram-bot`: one Telegram surface for two coding

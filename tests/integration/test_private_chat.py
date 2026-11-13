@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -192,7 +193,9 @@ async def test_new_session_resets_the_context_counter(bot_app: BotApp, messenger
     keyboard_messages = [item for item in messenger.sent if item.keyboard is not None]
     assert keyboard_messages, "the /new reply must carry the reset keyboard"
     labels = [b.text for row in keyboard_messages[-1].keyboard.keyboard for b in row]
-    assert labels == ["🧠 Model", "📊 0 / 200K (0%)"]
+    # The button names the model the turn will actually use, not just a
+    # placeholder: sessions without an explicit pick run the harness default.
+    assert labels == ["🧠 go/flash", "📊 0 / 200K (0%)"]
 
 
 async def test_replying_to_an_auto_quoted_answer_does_not_trigger(
@@ -213,3 +216,37 @@ async def test_replying_to_an_auto_quoted_answer_does_not_trigger(
     )
     await wait_for(lambda: True, timeout=0.5)
     assert len(fake_server.prompts) == prompts_before
+
+
+async def test_working_indicator_survives_a_tool_heavy_turn(
+    bot_app: BotApp, messenger, fake_server, store, monkeypatch
+) -> None:
+    """The chat used to go silent after the first sentence while tools ran."""
+
+    import app.telegram.runner as runner_module
+
+    monkeypatch.setattr(runner_module, "STATUS_AFTER", 0.0)
+    monkeypatch.setattr(runner_module, "STATUS_INTERVAL", 0.05)
+
+    fake_server.script = ["Looking into the existing deployments."]
+    fake_server.tool_calls = ["shell"]
+    fake_server.gate = asyncio.Event()
+
+    await send(bot_app, update("long job", chat_type="private", chat_id=111, update_id=161))
+
+    # An edit arrives that carries both the answer and the live counter.
+    await wait_for(
+        lambda: any(
+            "Looking into the existing deployments." in item.text and "Working" in item.text
+            for item in messenger.edited
+        ),
+        timeout=5.0,
+    )
+    # The chat action keeps being refreshed while the turn is still open.
+    assert len(messenger.typing) >= 2
+
+    fake_server.gate.set()
+    await wait_for(lambda: store.recent_turns(1)[0].status == "succeeded", timeout=5.0)
+    await wait_for(lambda: "Working" not in messenger.last_text, timeout=5.0)
+    assert "Looking into the existing deployments." in messenger.last_text
+    assert any("I'm done" in item.text for item in messenger.sent)

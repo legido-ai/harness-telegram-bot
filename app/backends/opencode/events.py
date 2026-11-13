@@ -23,6 +23,16 @@ log = logging.getLogger("bot.events")
 
 TEXT_DELTA = "session.text.delta"
 TEXT_ENDED = "session.text.ended"
+TOOL_STARTED = {
+    "session.tool.input.started",
+    "session.tool.called",
+    "session.tool.progress",
+}
+TOOL_ENDED = {
+    "session.tool.success",
+    "session.tool.failed",
+    "session.tool.error",
+}
 EXECUTION_DONE = {
     "session.execution.succeeded",
     "session.execution.failed",
@@ -56,6 +66,20 @@ class Event:
         for key in ("text", "content"):
             value = self.data.get(key)
             if isinstance(value, str):
+                return value
+        return None
+
+    @property
+    def tool_name(self) -> str | None:
+        """The tool a run is executing, when the event names it.
+
+        ``session.tool.input.started`` carries ``name`` (``shell``, ``edit``…);
+        the later lifecycle events only carry the call id.
+        """
+
+        for key in ("name", "tool"):
+            value = self.data.get(key)
+            if isinstance(value, str) and value:
                 return value
         return None
 
