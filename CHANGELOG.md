@@ -3,6 +3,21 @@
 All notable changes to this project are documented here. Format follows
 Keep a Changelog; versions use semantic versioning.
 
+## [0.3.2] — 2026-11-19
+
+A brief that mentions a slash path is a prompt again. Telegram marks every
+`/word` token as a `bot_command` wherever it sits, so a pasted spec containing
+`/internal/outlook/send` or `/healthz` reached the bot as a command, matched no
+handler, and came back as `Unknown command. Try /help.` — the request was never
+sent to the agent.
+
+### Fixed
+
+- Only a `bot_command` that opens the message (or follows this bot's own
+  @mention) is treated as a command; the same entity in the middle of the text
+  is prose. Bare `@bot /new` and `/new@bot` still run as before, and `/deploy`
+  in a group is still left to its owner.
+
 ## [0.3.1] — 2026-11-13
 
 A tool-heavy turn no longer looks dead. Previously the only sign of life was the

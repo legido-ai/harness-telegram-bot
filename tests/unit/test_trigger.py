@@ -139,3 +139,53 @@ def test_bare_command_of_another_bot_is_ignored() -> None:
     entity = Entity(type="bot_command", offset=0, length=len(text))
     message = inbound(text=text, entities=(entity,))
     assert detect(message, bot_id=BOT_ID, bot_username=BOT_USERNAME) is None
+
+
+def test_paths_inside_a_brief_are_prose_not_commands() -> None:
+    from app.telegram.types import Entity
+
+    # Telegram flags every /word token as a bot_command wherever it appears, so
+    # a pasted brief mentioning endpoints arrives with several of them.
+    text = (
+        "4. Endpoint name: use /internal/outlook/send. It matches "
+        "/internal/gmail/send.\n5. Verify microsoft_configured in /healthz."
+    )
+    entities = []
+    for token in ("/internal/outlook/send", "/internal/gmail/send", "/healthz"):
+        offset = text.index(token)
+        name_length = len(token.split("/")[1]) + 1
+        entities.append(Entity(type="bot_command", offset=offset, length=name_length))
+    message = inbound(
+        chat_type="private", chat_id=111, text=text, entities=tuple(entities)
+    )
+    trigger = detect(message, bot_id=BOT_ID, bot_username=BOT_USERNAME)
+    assert trigger is not None
+    assert trigger.kind == "private"
+    assert trigger.text == text
+
+
+def test_command_after_the_bot_mention_still_runs() -> None:
+    from app.telegram.types import Entity
+
+    text = "@oc3bot /new"
+    entities = (
+        mention_entity(text),
+        Entity(type="bot_command", offset=8, length=4),
+    )
+    message = inbound(text=text, entities=entities)
+    trigger = detect(message, bot_id=BOT_ID, bot_username=BOT_USERNAME)
+    assert trigger is not None
+    assert trigger.kind == "command"
+    assert trigger.text == "/new"
+
+
+def test_command_after_another_bots_mention_is_ignored() -> None:
+    from app.telegram.types import Entity
+
+    text = "@otherbot /new"
+    entities = (
+        Entity(type="mention", offset=0, length=len("@otherbot")),
+        Entity(type="bot_command", offset=10, length=4),
+    )
+    message = inbound(text=text, entities=entities)
+    assert detect(message, bot_id=BOT_ID, bot_username=BOT_USERNAME) is None

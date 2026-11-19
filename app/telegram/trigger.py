@@ -77,23 +77,49 @@ def _has_mention(text: str, entities: tuple[Entity, ...], bot_username: str, bot
     return False
 
 
+def _leading_command(
+    text: str, entities: tuple[Entity, ...], bot_username: str
+) -> Entity | None:
+    """Return the bot_command entity only when it opens the message.
+
+    Telegram flags every ``/word`` token as a bot_command, wherever it sits, so
+    a pasted brief that mentions ``/internal/outlook/send`` or ``/healthz``
+    arrives with several of them in the middle of the text. Only a command at
+    the very start of the message — or right after this bot's own @mention —
+    is an instruction to the bot; anything else is prose.
+    """
+
+    commands = [entity for entity in entities if entity.type == "bot_command"]
+    if not commands:
+        return None
+    first = min(commands, key=lambda entity: entity.offset)
+    mapping = _u16_map(text)
+    start = mapping[min(first.offset, len(mapping) - 1)]
+    prefix = text[:start].strip()
+    if not prefix:
+        return first
+    if prefix.lower() == f"@{bot_username.lstrip('@').lower()}":
+        return first
+    return None
+
+
 def _command_targets_bot(
     text: str, entities: tuple[Entity, ...], bot_username: str, is_private: bool
 ) -> tuple[bool, str | None]:
     """Return (addressed_to_this_bot, command_name)."""
 
-    for entity in entities:
-        if entity.type != "bot_command":
-            continue
-        raw = _entity_text(text, entity)
-        name, _, target = raw.partition("@")
-        command = name.lstrip("/").split(" ")[0].lower()
-        if target:
-            if target.lower() == bot_username.lstrip("@").lower():
-                return True, command
-            continue
-        if is_private or command in OWN_COMMANDS:
+    entity = _leading_command(text, entities, bot_username)
+    if entity is None:
+        return False, None
+    raw = _entity_text(text, entity)
+    name, _, target = raw.partition("@")
+    command = name.lstrip("/").split(" ")[0].lower()
+    if target:
+        if target.lower() == bot_username.lstrip("@").lower():
             return True, command
+        return False, None
+    if is_private or command in OWN_COMMANDS:
+        return True, command
     return False, None
 
 
@@ -119,12 +145,19 @@ def detect(
     addressed, command = _command_targets_bot(
         text, entities, bot_username, message.is_private
     )
+    command_entity = _leading_command(text, entities, bot_username)
     # A slash command is never a prompt. It only runs when it is addressed to
-    # this bot: unaddressed commands belong to other bots in the room.
-    if any(entity.type == "bot_command" for entity in entities):
+    # this bot: unaddressed commands belong to other bots in the room, and a
+    # bot_command entity in the middle of the text is just prose that happens
+    # to contain a path or a flag.
+    if command_entity is not None:
         if not addressed:
             return None
-        return Trigger(kind="command", text=cleaned_command(text, entities), quote=message.quote)
+        return Trigger(
+            kind="command",
+            text=cleaned_command(text, command_entity),
+            quote=message.quote,
+        )
 
     if message.is_private:
         cleaned = (
@@ -150,21 +183,20 @@ def detect(
     return None
 
 
-def cleaned_command(text: str, entities: tuple[Entity, ...]) -> str:
+def cleaned_command(text: str, entity: Entity) -> str:
     """Return ``/cmd@bot arg`` with the addressee removed and args kept."""
 
     mapping = _u16_map(text)
-    for entity in entities:
-        if entity.type != "bot_command":
-            continue
-        start = mapping[min(entity.offset, len(mapping) - 1)]
-        end = mapping[min(entity.offset + entity.length, len(mapping) - 1)]
-        raw = text[start:end]
-        if "@" in raw:
-            name, _, _target = raw.partition("@")
-            return " ".join((text[:start] + name + text[end:]).split())
-        return " ".join(text.split())
-    return text.strip()
+    start = mapping[min(entity.offset, len(mapping) - 1)]
+    end = mapping[min(entity.offset + entity.length, len(mapping) - 1)]
+    raw = text[start:end]
+    suffix = text[end:]
+    if "@" in raw:
+        name, _, _target = raw.partition("@")
+        return " ".join((text[:start] + name + suffix).split())
+    # A bare command may sit behind this bot's own @mention; the prefix is
+    # dropped either way, keeping the command and its arguments.
+    return " ".join((raw + suffix).split())
 
 
 def quoted_block(quote: Quoted | None, limit: int = 1500) -> str:
