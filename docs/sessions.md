@@ -91,3 +91,19 @@ from step 2 are the fallback.
 The one-line description in the command menu ("Browse and resume previous
 sessions") is BotFather state, not repository state. Set it once with
 `/setcommands` for each bot; the bot's behaviour is what this change delivers.
+
+## Why the agent container cannot run this deploy
+
+Checked on 2026-11-22, from the agent container (`uid 1000 david`):
+
+- `docker ps` → `permission denied ... /var/run/docker.sock` (socket is
+  `root:997`, the user is not in group 997 and there is no `sudo`).
+- `ssh ubuntu@82.70.92.83` → connection timed out; no key or `~/.ssh/config`.
+- `gh` and `kubectl` are not installed; the repository and its Actions runs are
+  private, so CI status cannot be read either.
+
+The binaries being present is not access. To let the agent deploy, one of these
+has to change on the operator side: add `david` to the docker group / expose a
+socket the user owns, provide an SSH key and host for `oci2`, or run the two
+Compose commands from `Deploy on oci2` above. Until then, merging to `main`
+publishes the image and the recreate step stays manual.
