@@ -3,6 +3,26 @@
 All notable changes to this project are documented here. Format follows
 Keep a Changelog; versions use semantic versioning.
 
+## [0.3.3] — 2026-11-22
+
+Attachments reached the agent and were rejected. The OpenCode prompt body requires
+`files[i].uri` (`PromptInput.FileAttachment`, and the schema is `additionalProperties:
+false`); the bot sent `{"type": "file", "path": …}`, so the server answered
+`400 InvalidRequestError: Missing key at ["files"][0]["uri"]` and the chat reported that the
+agent server had rejected the request. Supplying only the missing key would not have been
+enough: the bot and the agent run in separate containers with no shared mount, so a path
+cannot resolve on the server side.
+
+### Fixed
+
+- Attachments are sent as a self-contained `data:<mime>;base64,…` URI plus the file name. The
+  bytes travel in the request and no shared filesystem is assumed. Confirmed against the live
+  server (200) before shipping.
+- The tests pinned the bug rather than the contract: the integration test asserted
+  `files[0]["path"]`, the contract test passed `path` through verbatim, and the fake server
+  accepted any body. Both now assert the real shape, and the integration test decodes the
+  base64 back to the original bytes.
+
 ## [0.3.2] — 2026-11-19
 
 A brief that mentions a slash path is a prompt again. Telegram marks every
