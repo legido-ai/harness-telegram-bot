@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import base64
-
 from types import SimpleNamespace
 
 import pytest

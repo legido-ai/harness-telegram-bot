@@ -5,14 +5,25 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
-from pathlib import Path
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 from app.backends.base import FORM_CREATED, PERMISSION_ASKED, Interaction, RunOutcome
 from app.backends.errors import Busy, HarnessError, SessionGone, Unavailable
 from app.backends.opencode.client import PERMISSION_DECISIONS, OpenCodeClient
-def _api_files(files: "Sequence[dict[str, str]] | None") -> "list[dict[str, str]] | None":
+from app.backends.opencode.events import (
+    EXECUTION_DONE,
+    TEXT_DELTA,
+    TOOL_ENDED,
+    TOOL_STARTED,
+    Event,
+    EventBus,
+    consume_events,
+)
+
+
+def _api_files(files: Sequence[dict[str, str]] | None) -> list[dict[str, str]] | None:
     """Encode attachments as PromptInput.FileAttachment.
 
     The bot and the agent server share no filesystem, so a path cannot be
@@ -28,16 +39,6 @@ def _api_files(files: "Sequence[dict[str, str]] | None") -> "list[dict[str, str]
         data = base64.b64encode(path.read_bytes()).decode("ascii")
         out.append({"uri": f"data:{mime};base64,{data}", "name": path.name or "attachment"})
     return out
-
-from app.backends.opencode.events import (
-    EXECUTION_DONE,
-    TEXT_DELTA,
-    TOOL_ENDED,
-    TOOL_STARTED,
-    Event,
-    EventBus,
-    consume_events,
-)
 
 log = logging.getLogger("bot.backend.opencode")
 
