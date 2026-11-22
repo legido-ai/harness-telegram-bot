@@ -3,13 +3,32 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
+from pathlib import Path
 from collections.abc import Sequence
 from typing import Any
 
 from app.backends.base import FORM_CREATED, PERMISSION_ASKED, Interaction, RunOutcome
 from app.backends.errors import Busy, HarnessError, SessionGone, Unavailable
 from app.backends.opencode.client import PERMISSION_DECISIONS, OpenCodeClient
+def _api_files(files: "Sequence[dict[str, str]] | None") -> "list[dict[str, str]] | None":
+    """Encode attachments as PromptInput.FileAttachment.
+
+    The bot and the agent server share no filesystem, so a path cannot be
+    resolved remotely: the bytes travel inline as a data: URI. ``uri`` is the
+    required key; ``mime`` and ``name`` are the only other useful fields.
+    """
+    if not files:
+        return None
+    out: list[dict[str, str]] = []
+    for ref in files:
+        mime = ref.get("mime") or "application/octet-stream"
+        path = Path(str(ref.get("path") or ""))
+        data = base64.b64encode(path.read_bytes()).decode("ascii")
+        out.append({"uri": f"data:{mime};base64,{data}", "name": path.name or "attachment"})
+    return out
+
 from app.backends.opencode.events import (
     EXECUTION_DONE,
     TEXT_DELTA,
@@ -106,7 +125,9 @@ class OpenCodeBackend:
         events = self._bus.subscribe(ref)
         streamed = False
         try:
-            await self._client.prompt(ref, prompt, files=files, metadata=metadata)
+            await self._client.prompt(
+                ref, prompt, files=_api_files(files), metadata=metadata
+            )
             while True:
                 try:
                     event = await asyncio.wait_for(events.get(), timeout=self._run_timeout)

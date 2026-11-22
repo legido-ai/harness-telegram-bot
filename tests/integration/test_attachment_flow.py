@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+
 from types import SimpleNamespace
 
 import pytest
@@ -50,7 +52,8 @@ async def test_photo_with_caption_reaches_the_agent_as_a_file(
     await wait_for(lambda: len(fake_server.prompts) == 1)
 
     files = fake_server.files[0]
-    assert files and files[0]["mime"] == "image/jpeg"
-    assert files[0]["path"].startswith(str(settings.tmp_dir))
+    assert files and files[0]["uri"].startswith("data:image/jpeg;base64,")
+    assert base64.b64decode(files[0]["uri"].split(",", 1)[1]) == b"png"
+    assert files[0]["name"].endswith(".jpg")
     _, prompt, _ = fake_server.prompts[0]
     assert prompt.endswith("what is wrong here?")
