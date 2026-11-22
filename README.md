@@ -47,7 +47,8 @@ with the current one marked `(current)`. Then:
 A switch is refused while a turn is running or queued in that conversation
 (finish it or `/abort`), and a session that no longer exists in the harness is
 never bound. Non-admins can only resume sessions bound to their own
-conversation.
+conversation. Deploy and verification steps for the dev box:
+[`docs/sessions.md`](docs/sessions.md).
 
 
 ## The two backends
