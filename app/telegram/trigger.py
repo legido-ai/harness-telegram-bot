@@ -19,6 +19,8 @@ OWN_COMMANDS = frozenset(
         "id",
         "new",
         "sessions",
+        "resume",
+        "title",
         "switch",
         "abort",
         "status",

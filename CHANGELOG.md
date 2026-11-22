@@ -3,6 +3,35 @@
 All notable changes to this project are documented here. Format follows
 Keep a Changelog; versions use semantic versioning.
 
+## [0.4.0] — 2026-11-22
+
+`/sessions` now matches Hermes' native command: it browses previous sessions and
+resumes one without copy-pasting an id, on both backends.
+
+### Added
+
+- `/sessions` is a numbered list of this conversation's sessions, most recently
+  active first, with the current one marked `(current)`, its turn count and a
+  relative last-activity time.
+- Resume by number (`/sessions 2`, resolved against the list just shown,
+  including search results), by full id, by a unique six-character suffix, or by
+  title. `/resume` is an alias; `/switch` keeps working.
+- `/sessions search <query>` (alias `find`) filters titles and ids.
+- `/sessions all` for the configured admin: every chat's sessions plus harness
+  sessions with no binding, marked `unassigned`. Non-admins get the chat list
+  and a one-line admin-only notice.
+- `/title [name]` names the current session so it can be found and resumed
+  later.
+- Before a switch the bot checks that the session still exists in the harness,
+  and refuses while a run or queued message is in progress (`/abort` first).
+
+### Fixed
+
+- Switching back and forth between sessions no longer lists the same session
+  more than once. `session_bindings` had no unique key over
+  `(chat_id, thread_id, session_id)`, so every switch inserted a duplicate row;
+  schema v6 collapses existing duplicates and adds the index.
+
 ## [0.3.3] — 2026-11-22
 
 Attachments reached the agent and were rejected. The OpenCode prompt body requires
