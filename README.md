@@ -19,13 +19,36 @@ its messages; human-to-human chatter costs nothing.
   the context button (Telegram only relabels a keyboard from a fresh send).
 - **Pinned dashboard** — session, model, context, cost, queue depth; edited in
   place, never duplicated.
-- **Sessions** — `/new`, `/sessions`, `/switch`; one queue per chat/topic so two
-  humans are answered in order and sessions never interleave.
+- **Sessions** — `/sessions` browses this chat's sessions and resumes one by
+  number, id or title; `/sessions search <query>`, `/sessions all` (admin) and
+  `/title` to name the current one. One queue per chat/topic so two humans are
+  answered in order and sessions never interleave.
 - **Voice** — notes are transcribed (Whisper-compatible); `/tts off|auto|all`.
 - **Status bubble** — a slow turn shows `⏳ Working… 1m 05s` instead of silence.
 
 Commands: `/start /help /id /new /context /status /abort /trigger /tts /sessions
-/switch /model /agent /say`
+/resume /switch /title /model /agent /say`
+
+### Resuming a session
+
+`/sessions` lists this chat's sessions, newest activity first, ten per page,
+with the current one marked `(current)`. Then:
+
+- `/sessions 2` — resume the second row of the list you just saw (a search
+  result list counts as the list you saw).
+- `/sessions <id>` or `/sessions <last six characters>` — exact handle.
+- `/resume <title>` — by the name set with `/title Nightly build`.
+- `/sessions search deploy` — filter titles and ids; `/sessions find` is an
+  alias.
+- `/sessions all` — only the configured admin (first allowlisted user): every
+  chat's sessions plus harness sessions no chat is bound to (`unassigned`), so
+  a session can be recovered after the bot database is recreated.
+
+A switch is refused while a turn is running or queued in that conversation
+(finish it or `/abort`), and a session that no longer exists in the harness is
+never bound. Non-admins can only resume sessions bound to their own
+conversation.
+
 
 ## The two backends
 

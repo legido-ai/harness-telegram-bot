@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 TTS_MODES = ("off", "all", "auto")
 # Text-only by default: a voice note is transcribed and answered in text, and
 # audio is sent only when the user explicitly asks for it or enables /tts.
@@ -128,6 +128,26 @@ class Binding:
 
 
 @dataclass(frozen=True, slots=True)
+class SessionEntry:
+    """One row of the /sessions listing.
+
+    ``chat_id``/``thread_id``/``chat_title`` only carry meaning for the admin
+    "all" view; the chat-scoped query fills them with the current conversation
+    and no title.
+    """
+
+    session_id: str
+    title: str | None
+    active: bool
+    turn_count: int
+    last_active: int
+    chat_id: int = 0
+    thread_id: int = 0
+    chat_title: str | None = None
+    unassigned: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class Turn:
     id: int
     chat_id: int
@@ -169,6 +189,11 @@ class Store:
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
+        # SQLite's lower() folds ASCII only. Titles are user-authored and may be
+        # Spanish, so search uses Python's casefold on both sides.
+        self._conn.create_function(
+            "casefold", 1, lambda value: value.casefold() if isinstance(value, str) else ""
+        )
 
     def close(self) -> None:
         self._conn.close()
@@ -210,6 +235,58 @@ class Store:
                 # spoken answer. Audio is now opt-in (or explicit request).
                 self._conn.execute(
                     "UPDATE conversations SET tts_mode='off' WHERE tts_mode='auto'"
+                )
+            if current < 6:
+                # bind_session used INSERT OR REPLACE without a matching unique
+                # key, so every switch back to a session added a row. Collapse
+                # the duplicates before the index that makes the write
+                # idempotent, otherwise CREATE UNIQUE INDEX would abort on an
+                # existing database. The surviving row keeps the newest title
+                # and inherits "active" from any duplicate, because a switch
+                # deactivated the older rows and only the newest one matters.
+                self._conn.execute(
+                    """
+                    UPDATE session_bindings AS keep
+                    SET active = 1
+                    WHERE keep.id IN (
+                        SELECT MAX(id) FROM session_bindings
+                        GROUP BY chat_id, thread_id, session_id
+                    )
+                    AND EXISTS (
+                        SELECT 1 FROM session_bindings x
+                        WHERE x.chat_id = keep.chat_id
+                          AND x.thread_id = keep.thread_id
+                          AND x.session_id = keep.session_id
+                          AND x.active = 1
+                    )
+                    """
+                )
+                self._conn.execute(
+                    """
+                    UPDATE session_bindings AS keep
+                    SET title = (
+                        SELECT x.title FROM session_bindings x
+                        WHERE x.chat_id = keep.chat_id
+                          AND x.thread_id = keep.thread_id
+                          AND x.session_id = keep.session_id
+                          AND x.title IS NOT NULL
+                        ORDER BY x.id DESC LIMIT 1
+                    )
+                    WHERE keep.id IN (
+                        SELECT MAX(id) FROM session_bindings
+                        GROUP BY chat_id, thread_id, session_id
+                    )
+                    AND keep.title IS NULL
+                    """
+                )
+                self._conn.execute(
+                    "DELETE FROM session_bindings WHERE id NOT IN "
+                    "(SELECT MAX(id) FROM session_bindings "
+                    " GROUP BY chat_id, thread_id, session_id)"
+                )
+                self._conn.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ux_session_bindings_session "
+                    "ON session_bindings(chat_id, thread_id, session_id)"
                 )
             if current < SCHEMA_VERSION:
                 self._conn.execute(
@@ -411,9 +488,12 @@ class Store:
                 (chat_id, thread_id),
             )
             self._conn.execute(
-                "INSERT OR REPLACE INTO session_bindings"
+                "INSERT INTO session_bindings"
                 "(chat_id, thread_id, session_id, title, bound_by, bound_at, active) "
-                "VALUES(?, ?, ?, ?, ?, ?, 1)",
+                "VALUES(?, ?, ?, ?, ?, ?, 1) "
+                "ON CONFLICT(chat_id, thread_id, session_id) DO UPDATE SET "
+                "active=1, bound_by=excluded.bound_by, bound_at=excluded.bound_at, "
+                "title=COALESCE(excluded.title, session_bindings.title)",
                 (chat_id, thread_id, session_id, title, bound_by, now),
             )
             self._conn.execute(
@@ -450,6 +530,110 @@ class Store:
             )
             for row in rows
         ]
+
+    _ENTRY_COLUMNS = """
+        b.chat_id AS chat_id,
+        b.thread_id AS thread_id,
+        b.session_id AS session_id,
+        b.title AS title,
+        b.active AS active,
+        COALESCE(
+            (SELECT MAX(t.created_at) FROM turns t WHERE t.session_id = b.session_id),
+            b.bound_at
+        ) AS last_active,
+        (SELECT COUNT(*) FROM turns t WHERE t.session_id = b.session_id) AS turn_count
+    """
+
+    @staticmethod
+    def _entry(row: sqlite3.Row) -> SessionEntry:
+        keys = row.keys()
+        return SessionEntry(
+            session_id=row["session_id"],
+            title=row["title"],
+            active=bool(row["active"]),
+            turn_count=int(row["turn_count"]),
+            last_active=int(row["last_active"]),
+            chat_id=int(row["chat_id"]),
+            thread_id=int(row["thread_id"]),
+            chat_title=row["chat_title"] if "chat_title" in keys else None,
+        )
+
+    def list_session_entries(
+        self, chat_id: int, thread_id: int, limit: int = 10, search: str | None = None
+    ) -> list[SessionEntry]:
+        """This conversation's sessions, most recently active first.
+
+        Ordering uses the last recorded turn, falling back to the moment the
+        session was bound: a session that has been used recently belongs at the
+        top even if the chat switched away from it long ago.
+        """
+
+        sql = (
+            f"SELECT {self._ENTRY_COLUMNS} FROM session_bindings b "
+            "WHERE b.chat_id=? AND b.thread_id=?"
+        )
+        params: list[Any] = [chat_id, thread_id]
+        if search:
+            sql += (
+                " AND (instr(casefold(COALESCE(b.title, '')), casefold(?)) > 0"
+                " OR instr(casefold(b.session_id), casefold(?)) > 0)"
+            )
+            params.extend([search, search])
+        sql += " ORDER BY last_active DESC, b.active DESC, b.id DESC LIMIT ?"
+        params.append(limit)
+        rows = self._conn.execute(sql, params).fetchall()
+        return [self._entry(row) for row in rows]
+
+    def list_all_session_entries(
+        self, limit: int = 50, search: str | None = None
+    ) -> list[SessionEntry]:
+        """Every bound session, with its origin chat title (admin view)."""
+
+        sql = (
+            f"SELECT {self._ENTRY_COLUMNS}, c.title AS chat_title "
+            "FROM session_bindings b "
+            "LEFT JOIN conversations c ON c.chat_id = b.chat_id AND c.thread_id = b.thread_id"
+        )
+        params: list[Any] = []
+        if search:
+            sql += (
+                " WHERE (instr(casefold(COALESCE(b.title, '')), casefold(?)) > 0"
+                " OR instr(casefold(b.session_id), casefold(?)) > 0)"
+            )
+            params.extend([search, search])
+        sql += " ORDER BY last_active DESC, b.active DESC, b.id DESC LIMIT ?"
+        params.append(limit)
+        rows = self._conn.execute(sql, params).fetchall()
+        return [self._entry(row) for row in rows]
+
+    def get_session_entry(
+        self, chat_id: int, thread_id: int, session_id: str
+    ) -> SessionEntry | None:
+        row = self._conn.execute(
+            f"SELECT {self._ENTRY_COLUMNS} FROM session_bindings b "
+            "WHERE b.chat_id=? AND b.thread_id=? AND b.session_id=?",
+            (chat_id, thread_id, session_id),
+        ).fetchone()
+        return self._entry(row) if row else None
+
+    def binding_title(self, chat_id: int, thread_id: int, session_id: str) -> str | None:
+        row = self._conn.execute(
+            "SELECT title FROM session_bindings "
+            "WHERE chat_id=? AND thread_id=? AND session_id=?",
+            (chat_id, thread_id, session_id),
+        ).fetchone()
+        return row["title"] if row else None
+
+    def set_binding_title(
+        self, chat_id: int, thread_id: int, session_id: str, title: str | None
+    ) -> bool:
+        with self._conn:
+            cur = self._conn.execute(
+                "UPDATE session_bindings SET title=? "
+                "WHERE chat_id=? AND thread_id=? AND session_id=?",
+                (title, chat_id, thread_id, session_id),
+            )
+        return cur.rowcount > 0
 
     # -- turns -----------------------------------------------------------
 

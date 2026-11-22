@@ -8,6 +8,7 @@ behaviour testable without a live bot.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import replace
 from typing import Any
 
@@ -26,8 +27,8 @@ from app.backends.errors import HarnessError
 from app.config import Settings
 from app.health import HealthState
 from app.speech.stt import SttClient, SttError
-from app.store import TTS_MODES, Store
-from app.telegram import commands, keyboards, voice
+from app.store import TTS_MODES, SessionEntry, Store
+from app.telegram import commands, keyboards, sessions, voice
 from app.telegram.attachments import AttachmentError, collect
 from app.telegram.auth import Authorizer
 from app.telegram.convert import from_update
@@ -62,6 +63,12 @@ class BotApp:
         # Telegram caps callback_data at 64 bytes; a short token keeps menus
         # usable without embedding session ids and model names in every button.
         self._choices: dict[str, tuple[str, str, str, str]] = {}
+        # What /sessions last showed to *this human* in this conversation.
+        # Numbers are resolved against it, so "3" means the third row they read
+        # (including after a search) and one member's listing never drives
+        # another member's switch. Entries expire after an hour; ids and titles
+        # still resolve afterwards.
+        self._last_listing: dict[tuple[int, int, int], tuple[list[SessionEntry], float]] = {}
         self.messenger: Messenger | None = messenger
         self.bot_id = 0
         self.bot_username = ""
@@ -431,25 +438,251 @@ class BotApp:
         await self._reply(message, copy[mode])
 
     async def _cmd_sessions(self, message: Inbound, argument: str) -> None:
-        bindings = self.store.list_bindings(message.chat_id, message.thread_id, limit=10)
-        rows = []
-        for binding in bindings:
-            short = await self.backend.describe(binding.session_id)
-            rows.append((short, binding.title or "untitled", binding.active))
-        text = commands.sessions_text(rows)
-        keyboard = None
-        if bindings:
-            entries = [
-                (self._token("s", binding.session_id, "", ""), binding.title or "untitled")
-                for binding in bindings
-            ]
-            keyboard = keyboards.sessions_keyboard(
-                message.chat_id, message.thread_id, entries
-            )
-        await self._reply(message, text, keyboard)
+        args = sessions.parse_args(argument)
+        if args.search == "":
+            await self._reply(message, "Usage: /sessions search <query>")
+            return
+        if args.target:
+            await self._resume_target(message, args.target, all_chats=args.all_chats)
+            return
+        await self._show_sessions(message, args)
+
+    async def _cmd_resume(self, message: Inbound, argument: str) -> None:
+        await self._cmd_sessions(message, argument)
 
     async def _cmd_switch(self, message: Inbound, argument: str) -> None:
         await self._cmd_sessions(message, argument)
+
+    async def _cmd_title(self, message: Inbound, argument: str) -> None:
+        conversation = self.store.get_conversation(message.chat_id, message.thread_id)
+        session_id = conversation.active_session_id if conversation else None
+        if not session_id:
+            await self._reply(
+                message,
+                "This conversation has no session yet. Send a message and one is created.",
+            )
+            return
+        if not argument.strip():
+            current = self.store.binding_title(message.chat_id, message.thread_id, session_id)
+            await self._reply(
+                message,
+                f'current title: "{current}"' if current else "this session has no title yet.",
+            )
+            return
+        title = sessions.clean_title(argument)
+        if title is None:
+            await self._reply(message, "The title cannot be empty.")
+            return
+        self.store.set_binding_title(message.chat_id, message.thread_id, session_id, title)
+        await self._reply(message, f'Session titled "{title}".')
+
+    async def _show_sessions(self, message: Inbound, args: sessions.Args) -> None:
+        admin = self.authorizer.is_admin(message)
+        cross_origin = args.all_chats and admin
+        notice = None
+        if args.all_chats and not admin:
+            notice = "all (cross-chat listing) is admin-only; showing this chat's sessions."
+
+        entries: list[SessionEntry]
+        if cross_origin:
+            entries = self.store.list_all_session_entries(limit=50, search=args.search)
+            warnings: list[str] = []
+            entries = await self._with_unassigned(entries, args.search, warnings)
+            if warnings:
+                notice = warnings[0]
+        else:
+            entries = self.store.list_session_entries(
+                message.chat_id, message.thread_id, limit=10, search=args.search
+            )
+
+        shown = entries[: sessions.MAX_ROWS]
+        if cross_origin:
+            shown = [self._origin(entry) for entry in shown]
+        self._remember_listing(message, shown)
+        text = sessions.format_listing(
+            shown, search=args.search, all_chats=cross_origin, notice=notice
+        )
+        keyboard = None
+        if shown:
+            rows = [
+                (self._token("s", entry.session_id, "", ""), entry.title or "untitled")
+                for entry in shown
+            ]
+            keyboard = keyboards.sessions_keyboard(
+                message.chat_id, message.thread_id, rows
+            )
+        await self._reply(message, text, keyboard)
+
+    @staticmethod
+    def _origin(entry: SessionEntry) -> SessionEntry:
+        """Label the origin of a bound session in the admin view."""
+
+        if entry.unassigned:
+            return entry
+        if entry.chat_title:
+            return entry
+        return replace(entry, chat_title=f"chat {entry.chat_id}")
+
+    def _remember_listing(self, message: Inbound, entries: list[SessionEntry]) -> None:
+        key = (message.chat_id, message.thread_id, message.user_id)
+        if len(self._last_listing) > 200:
+            now = time.time()
+            self._last_listing = {
+                item: value for item, value in self._last_listing.items() if now - value[1] < 3600
+            }
+        self._last_listing[key] = (entries, time.time())
+
+    def _remembered_listing(self, message: Inbound) -> list[SessionEntry] | None:
+        key = (message.chat_id, message.thread_id, message.user_id)
+        remembered = self._last_listing.get(key)
+        if remembered is None:
+            return None
+        entries, stamp = remembered
+        if time.time() - stamp > 3600:
+            self._last_listing.pop(key, None)
+            return None
+        return entries
+
+    async def _with_unassigned(
+        self, entries: list[SessionEntry], search: str | None, notice: list[str]
+    ) -> list[SessionEntry]:
+        """Append harness sessions that no conversation is bound to (admin only)."""
+
+        known = {entry.session_id for entry in self.store.list_all_session_entries(limit=500)}
+        try:
+            catalogue = await self.backend.list_sessions(limit=50)
+        except HarnessError:
+            notice.append("the harness catalogue is unavailable; showing bound sessions only.")
+            return entries
+        extra: list[SessionEntry] = []
+        for item in catalogue:
+            session_id = str(item.get("id") or "")
+            if not session_id or session_id in known:
+                continue
+            title = str(item.get("title") or "") or None
+            if search:
+                needle = search.casefold()
+                if needle not in session_id.casefold() and needle not in (title or "").casefold():
+                    continue
+            extra.append(
+                SessionEntry(
+                    session_id=session_id,
+                    title=title,
+                    active=False,
+                    turn_count=0,
+                    last_active=int(item.get("updated") or time.time()),
+                    chat_title=None,
+                    unassigned=True,
+                )
+            )
+        return sorted(
+            [*entries, *extra], key=lambda entry: entry.last_active, reverse=True
+        )
+
+    async def _resume_target(self, message: Inbound, target: str, *, all_chats: bool) -> None:
+        admin = self.authorizer.is_admin(message)
+        if all_chats and admin:
+            entries = await self._with_unassigned(
+                self.store.list_all_session_entries(limit=50), None, []
+            )
+            entries = [self._origin(entry) for entry in entries]
+        else:
+            entries = self._remembered_listing(message)
+            if entries is None:
+                target_text = target.strip()
+                if target_text.isdigit() and 1 <= int(target_text) <= sessions.MAX_ROWS:
+                    # A bare number only means something next to the list the
+                    # human just read. After a restart the same number would
+                    # point at a different session, so ask for the list instead.
+                    await self._reply(
+                        message,
+                        "That listing has expired. Run /sessions to see the current numbering.",
+                    )
+                    return
+                entries = self.store.list_session_entries(
+                    message.chat_id, message.thread_id, limit=sessions.MAX_ROWS
+                )
+
+        resolved = sessions.resolve_target(entries, target)
+        if isinstance(resolved, sessions.OutOfRange):
+            await self._reply(
+                message,
+                f"There is no session {resolved.index} in this list. "
+                "Run /sessions to see the current numbering.",
+            )
+            return
+        if isinstance(resolved, sessions.NotFound):
+            await self._reply(
+                message, f'No session here matches "{resolved.target}". Run /sessions to see the list.'
+            )
+            return
+        if isinstance(resolved, sessions.Ambiguous):
+            lines = [f'"{target}" matches several sessions:', ""]
+            for index, entry in enumerate(resolved.entries[: sessions.MAX_ROWS], start=1):
+                lines.append(sessions.format_row(index, entry))
+            lines.append("")
+            lines.append("Use the number or the id.")
+            await self._reply(message, "\n".join(lines))
+            return
+
+        ok, text = await self._activate_session(message, resolved.entry)
+        await self._reply(message, text)
+        if not ok:
+            return
+
+    async def _activate_session(self, message: Inbound, entry: SessionEntry) -> tuple[bool, str]:
+        """Switch this conversation to ``entry``; return (ok, reply copy)."""
+
+        if self.runner.busy(message.key):
+            return (
+                False,
+                "A run is still in progress here. Wait for it to finish or /abort, then switch.",
+            )
+        admin = self.authorizer.is_admin(message)
+        if not admin:
+            if entry.unassigned:
+                return False, "No session here matches that. Run /sessions to see the list."
+            fresh = self.store.get_session_entry(
+                message.chat_id, message.thread_id, entry.session_id
+            )
+            if fresh is None:
+                # The binding was removed (or never belonged here) after the
+                # listing was rendered. A routing handle is not authority.
+                return False, "No session here matches that. Run /sessions to see the list."
+            entry = fresh
+
+        try:
+            exists = await self.backend.session_exists(entry.session_id)
+        except HarnessError as exc:
+            return False, exc.user_message
+        if not exists:
+            return False, "That session no longer exists in the harness. /new starts a fresh one."
+
+        conversation = self.store.get_conversation(message.chat_id, message.thread_id)
+        if conversation and conversation.active_session_id == entry.session_id:
+            title = entry.title or "this session"
+            return True, f'📌 Already on session "{title}".'
+
+        # session_exists awaited; re-check the queue so a message that arrived
+        # during that call is not silently retargeted by this switch.
+        if self.runner.busy(message.key):
+            return (
+                False,
+                "A run is still in progress here. Wait for it to finish or /abort, then switch.",
+            )
+
+        title = entry.title
+        self.store.bind_session(
+            message.chat_id, message.thread_id, entry.session_id, title, bound_by=message.user_id
+        )
+        await self.runner.refresh_dashboard(message)
+        name = title or sessions.short_id(entry.session_id)
+        turns = entry.turn_count
+        count = f"{turns} turn{'s' if turns != 1 else ''}"
+        return (
+            True,
+            f'↻ Resumed session "{name}" ({count}). The next message continues it.',
+        )
 
     def _token(self, kind: str, session_id: str, a: str, b: str = "") -> str:
         if len(self._choices) > 400:
@@ -740,14 +973,28 @@ class BotApp:
                 await self.messenger.answer_callback(message.callback_id or "", "This control has expired.")
             return
         _, session_id, _, _ = choice
-        self.store.bind_session(chat_id, thread_id, session_id, None, bound_by=message.user_id)
-        await self.runner.refresh_dashboard(message)
+        entries = self._remembered_listing(message) or []
+        entry = next(
+            (item for item in entries if item.session_id == session_id), None
+        ) or self.store.get_session_entry(chat_id, thread_id, session_id)
+        if entry is None:
+            # Never synthesise one: a token from another conversation's listing
+            # (or from before a restart) would otherwise bind a session this
+            # chat never owned.
+            if self.messenger:
+                await self.messenger.answer_callback(
+                    message.callback_id or "", "This control has expired."
+                )
+            return
+        ok, text = await self._activate_session(message, entry)
         if self.messenger:
-            await self.messenger.answer_callback(message.callback_id or "", "Switched.")
-            short = await self.backend.describe(session_id)
-            await self.messenger.edit_text(
-                message.chat_id, message.message_id, f"Switched to session {short}."
+            await self.messenger.answer_callback(
+                message.callback_id or "", text[:190] if not ok else "Switched."
             )
+            if ok:
+                await self.messenger.edit_text(
+                    message.chat_id, message.message_id, text
+                )
 
     # -- agent interactions ---------------------------------------------
 

@@ -14,7 +14,9 @@ conversation that is not addressed to me.
 The two buttons below the input: model picker and context usage.
 
 /new            start a fresh session in this conversation
-/sessions       list recent sessions and switch
+/sessions       browse this chat's sessions and resume one
+/resume         same as /sessions: list, or resume by number/id/title
+/title          show or set the current session's name
 /abort          stop the run that is in progress
 /status         session, model, agent and queue depth
 /model          pick the model for this conversation
@@ -38,16 +40,6 @@ def parse(text: str) -> tuple[str, str]:
 
 def help_text(username: str) -> str:
     return HELP.format(username=username.lstrip("@"))
-
-
-def sessions_text(sessions: list[tuple[str, str, bool]]) -> str:
-    if not sessions:
-        return "No sessions yet. Send a message and one is created."
-    lines = ["Recent sessions in this conversation:"]
-    for index, (session_id, title, active) in enumerate(sessions, start=1):
-        marker = "*" if active else " "
-        lines.append(f"{marker} {index}. {title or 'untitled'} — {session_id[-6:]}")
-    return "\n".join(lines)
 
 
 def id_text(message: Inbound) -> str:

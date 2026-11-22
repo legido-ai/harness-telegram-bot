@@ -124,6 +124,11 @@ class Runner:
         queue = self._queues.get(key)
         return queue.qsize() if queue else 0
 
+    def busy(self, key: tuple[int, int]) -> bool:
+        """A run is streaming or a message is queued for this conversation."""
+
+        return key in self._active_session or self.queue_depth(key) > 0
+
     @property
     def active_sessions(self) -> dict[tuple[int, int], str]:
         return dict(self._active_session)
