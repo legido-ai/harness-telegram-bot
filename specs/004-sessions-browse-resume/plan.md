@@ -60,6 +60,7 @@ app/store.py                     SessionEntry, list_session_entries(),
                                  v6 migration (dedupe + unique index)
 app/telegram/sessions.py         pure: parse_args(), format_listing(),
                                  resolve_target() — no I/O
+app/telegram/titles.py           pure: derive_title() from the opening message
 app/telegram/commands.py         HELP gains the new forms
 app/telegram/app.py              _cmd_sessions, _cmd_resume, _cmd_title,
                                  _activate_session(), callback uses it
@@ -121,10 +122,19 @@ row for that binding (there is at most one after v6). Empty argument prints the
 active title; no active session explains that the first message creates one.
 Validation: strip, collapse inner whitespace, 1–60 characters.
 
+### Session names
+
+A session is bound with no title. On its first recorded turn the runner derives
+the name from the user's text (`titles.derive_title`): first non-empty line,
+whitespace collapsed, 48 characters at a word boundary with `…`. Later turns do
+not touch it; `/title` overrides it. The schema v7 migration clears titles that
+equal the conversation title or a participant display name, which were the old
+auto-titles ("Javier").
+
 ## Testing strategy
 
 - `tests/unit/test_sessions.py`: parsing table, formatting (current marker,
-  ordering, empty, search header, relative time), resolution (ordinal, id,
+  ordering, empty, search header), resolution (ordinal, id,
   suffix, title, ambiguity, out of range, not found).
 - `tests/unit/test_store.py`: v5→v6 migration with duplicate rows keeps the
   newest and sets one active; ordering by turn activity; search title/id;

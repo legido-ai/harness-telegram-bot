@@ -68,6 +68,17 @@
 - [x] T023 Commit on `004-sessions-browse-resume`, push, verify
       `git rev-parse HEAD` equals `origin/main` after merge.
 
+## Phase 6 — Named sessions (2026-11-24)
+
+- [x] T024 [US1] `app/telegram/titles.py`: `derive_title()` from the opening
+      message, Hermes rules (FR-019).
+- [x] T025 [US1] `Runner.new_session` stops using chat/display name; the first
+      recorded turn names the session once (FR-019, FR-020).
+- [x] T026 [US1] Schema v7 clears author/chat-shaped titles (FR-021).
+- [x] T027 [US1] Listing rows become `N. Title (current) — id`; header and
+      footer match Hermes (FR-001).
+- [x] T028 Tests: titles unit, naming integration, migration, formatting.
+
 ## Traceability
 
 | FR | Tasks |
@@ -90,3 +101,6 @@
 | FR-016 | T012, T016, T020 |
 | FR-017 | T017 |
 | FR-018 | T005, T019 |
+| FR-019 | T024, T025, T028 |
+| FR-020 | T025, T028 |
+| FR-021 | T026, T028 |

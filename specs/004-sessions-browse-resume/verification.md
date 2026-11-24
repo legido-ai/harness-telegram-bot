@@ -95,3 +95,30 @@ One `consult` pass (sonnet55). Findings and disposition:
 Remaining accepted risk: the admin `all` view over-fetches 50 bound rows and
 then shows 10; sessions beyond the first ten are reachable by id/title, not by
 number. The footer says `/sessions <id>` for exactly that case.
+
+## Addendum 2026-11-24 — named sessions, no author
+
+Reported from a live chat: `/sessions` showed `Javier — MSwMVt` twice, because
+a new session was titled with the speaker's display name. Hermes names a
+session from its opening message.
+
+Changes:
+
+- `app/telegram/titles.py` reproduces Hermes' instant derived title: first
+  non-empty line, whitespace collapsed, 48 characters at a word boundary with
+  `…` (`agent/title_generator.py::derive_title` upstream).
+- `Runner.new_session` binds no title; the first recorded turn names the
+  session once. Later turns do not rename it. `/title` still wins.
+- Schema v7 clears stored titles equal to the conversation title or a
+  participant's display name; unrelated titles survive.
+- Rows are `N. Title (current) — id`, header `📋 Sessions`, footer
+  `/resume <number>` / `/resume <id>`, matching the native list.
+
+Tests: `tests/unit/test_titles.py`, the naming and search tests in
+`tests/integration/test_sessions_command.py`, and
+`test_migration_clears_author_shaped_titles` in `tests/unit/test_store.py`.
+
+What this does not do: an existing session whose opening text was never stored
+cannot be renamed from its history; the migration clears the author title and
+the session shows `untitled` until `/title` names it. New sessions are named
+automatically.

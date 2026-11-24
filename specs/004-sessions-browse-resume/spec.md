@@ -8,6 +8,11 @@
 
 **Input**: User description: "Improve multi-harness telegram bot (so far supporting pi and OpenCode) to have same /sessions features as Hermes native one."
 
+**Clarified 2026-11-24**: sessions must be *named* like Hermes (a topic derived
+from the opening message), never titled with the speaker's name or the chat
+name. A `/sessions` row is `N. Title (current) — id`; the author does not
+appear. Existing bindings titled with an author or chat name are cleared once.
+
 ## Context
 
 Hermes (the third harness in the same box) ships a native `/sessions`
@@ -179,9 +184,9 @@ admin-only note.
 ### Functional Requirements
 
 - **FR-001**: `/sessions` MUST list the sessions bound to the current
-  conversation, most recently active first, at most ten, each with an ordinal,
-  its title (or `untitled`), its short id, its number of turns and a relative
-  last-activity time.
+  conversation, most recently active first, at most ten, each rendered as
+  `N. Title (current) — id`, with the title `untitled` when the session has no
+  name yet. The speaker's name and the chat name MUST NOT appear as the title.
 - **FR-002**: The list MUST mark exactly the active session `(current)` and MUST
   list each session at most once, even when the conversation has switched to it
   more than once.
@@ -229,6 +234,15 @@ admin-only note.
   forms.
 - **FR-018**: The state schema MUST tolerate an existing database that already
   contains duplicate bindings, migrating it forward without operator action.
+- **FR-019**: A session MUST be named from its opening user message: the first
+  non-empty line, whitespace collapsed, cut at a word boundary to 48 characters
+  with an ellipsis. It MUST NOT use the chat title, the chat type or the
+  speaker's display name.
+- **FR-020**: The derived name MUST be set once, on the first recorded turn of
+  that session; later turns MUST NOT rename it, and `/title` MUST override it.
+- **FR-021**: On migration, a stored title that equals the conversation title or
+  a known participant's display name MUST be cleared once; other titles MUST be
+  preserved.
 
 ### Key Entities
 
@@ -255,6 +269,8 @@ admin-only note.
   covered by an automated test.
 - **SC-005**: The offline suite (`make test`) passes with no network, no bot
   token and no live harness.
+- **SC-006**: A session created from a message shows that message's own words as
+  its name, and 0% of new sessions are titled with a person's or chat's name.
 
 ## Assumptions
 
