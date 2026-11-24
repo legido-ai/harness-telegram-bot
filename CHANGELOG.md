@@ -3,6 +3,26 @@
 All notable changes to this project are documented here. Format follows
 Keep a Changelog; versions use semantic versioning.
 
+## [0.4.1] — 2026-11-24
+
+Sessions are named, not labelled with the speaker. `/sessions` used to show
+`Javier — MSwMVt` because a new session was titled with the chat or speaker
+name; two sessions in the same chat were indistinguishable.
+
+### Added
+
+- A session is named from its opening message, as Hermes does: the first
+  non-empty line, whitespace collapsed, cut at a word boundary to 48 characters
+  with `…`. Later messages do not rename it; `/title` still overrides it.
+- `/sessions` rows now read `1. Fix the login button (current) — 1a2b3c`, and
+  the footer resumes with `/resume <number>`, matching the native Hermes list.
+
+### Fixed
+
+- Schema v7 clears stored titles that equal the conversation title or a
+  participant's display name, so existing sessions stop showing the author.
+  Other titles survive.
+
 ## [0.4.0] — 2026-11-22
 
 `/sessions` now matches Hermes' native command: it browses previous sessions and

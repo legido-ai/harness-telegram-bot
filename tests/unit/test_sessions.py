@@ -120,21 +120,14 @@ def test_unknown_target_is_not_found() -> None:
 # -- formatting ----------------------------------------------------------
 
 
-def test_listing_marks_current_and_counts_turns() -> None:
+def test_listing_marks_current_and_uses_the_hermes_row_shape() -> None:
     text = sessions.format_listing(ROWS, now=1_700_003_600)
-    assert text.startswith("📋 Sessions in this chat")
-    assert "* 1. Nightly build (current)" in text
-    assert "12 turns" in text
-    assert "1 turn" not in text
-    assert "3 turns" in text
-    assert "0 turns" in text
-    assert "1h ago" in text
-    assert "/sessions <number>" in text
-
-
-def test_singular_turn_is_written_as_one_turn() -> None:
-    text = sessions.format_listing([entry("ses_x", "Solo", turns=1)], now=1_700_000_010)
-    assert "1 turn" in text and "1 turns" not in text
+    assert text.startswith("📋 Sessions")
+    assert "1. Nightly build (current) — 111111" in text
+    assert "2. Write docs — 222222" in text
+    assert "turns" not in text
+    assert "ago" not in text
+    assert "/resume <number>" in text
 
 
 def test_empty_listing_explains_how_to_start() -> None:

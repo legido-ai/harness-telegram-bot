@@ -33,6 +33,7 @@ from app.telegram.keyboards import context_label, main_menu
 from app.telegram.language import requested_language
 from app.telegram.messenger import Messenger
 from app.telegram.streaming import StreamEditor
+from app.telegram.titles import derive_title
 from app.telegram.trigger import Trigger
 from app.telegram.types import Inbound
 
@@ -189,14 +190,33 @@ class Runner:
         conversation = self._store.touch_conversation(
             message.chat_id, message.thread_id, message.chat_type, message.chat_title
         )
-        title = (message.chat_title or message.display_name or "conversation")[:60]
+        # No title yet: a session is named from its opening message (see
+        # _run), never from the chat or the speaker. /title overrides it.
         session_id = await self._backend.create_session(
-            title=title, agent=conversation.agent, model=conversation.model
+            title=None, agent=conversation.agent, model=conversation.model
         )
         self._store.bind_session(
-            message.chat_id, message.thread_id, session_id, title, bound_by=bound_by
+            message.chat_id, message.thread_id, session_id, None, bound_by=bound_by
         )
         return session_id, True
+
+    def _name_session(self, message: Inbound, session_id: str, text: str) -> None:
+        """Name a session from its opening message, once.
+
+        ``turns_for_session`` already counts this turn because submit() records
+        it before the run starts, so ``<= 1`` means "first message in this
+        session" for both a fresh session and one just started with /new.
+        """
+
+        if self._store.binding_title(message.chat_id, message.thread_id, session_id):
+            return
+        if self._store.turns_for_session(session_id) > 1:
+            return
+        title = derive_title(text)
+        if title:
+            self._store.set_binding_title(
+                message.chat_id, message.thread_id, session_id, title
+            )
 
     # -- one run ---------------------------------------------------------
 
@@ -232,6 +252,7 @@ class Runner:
         if turn_id:
             self._store.attach_turn_session(turn_id, session_id)
             self._store.start_turn(turn_id)
+        self._name_session(message, session_id, job.trigger.text)
         self._active_session[key] = session_id
 
         state = RunState(

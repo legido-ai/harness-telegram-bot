@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.telegram.app import BotApp
+from tests.helpers import wait_for
 from tests.telegram_factory import BOT_ID, BOT_USERNAME, callback_update, update
 
 
@@ -54,7 +55,7 @@ async def test_sessions_lists_numbered_with_current_marker(bot_app, fake_server,
     assert "1. Write docs (current)" in text
     assert "2. Nightly build" in text
     assert text.count("ses_") == 0  # only the six-character short id is shown
-    assert "/sessions <number>" in text
+    assert "/resume <number>" in text
 
 
 async def test_resume_by_number_switches_and_persists(bot_app, fake_server, store, messenger) -> None:
@@ -298,3 +299,64 @@ async def test_callback_cannot_bind_another_chats_session(bot_app, fake_server, 
 
     assert store.get_conversation(-100123, 0).active_session_id == "ses_aaaaaa111111"
     assert messenger.callbacks[-1][1] == "This control has expired."
+
+
+async def test_first_message_names_the_session(bot_app, fake_server, store, messenger) -> None:
+    await send(
+        bot_app,
+        update(
+            "Fix the login button on mobile",
+            chat_type="private",
+            chat_id=111,
+            update_id=1,
+        ),
+    )
+    await wait_for(lambda: len(fake_server.prompts) == 1)
+
+    session_id = store.get_conversation(111, 0).active_session_id
+    assert session_id is not None
+    assert store.binding_title(111, 0, session_id) == "Fix the login button on mobile"
+    assert store.binding_title(111, 0, session_id) not in ("Ana", "OC3 build")
+
+    await send(bot_app, cmd("/sessions", chat_type="private", chat_id=111, update_id=2))
+    text = listing(messenger)
+    assert "1. Fix the login button on mobile (current)" in text
+    assert "Ana" not in text
+
+
+async def test_later_messages_do_not_rename_the_session(bot_app, fake_server, store) -> None:
+    await send(bot_app, update("Name this from here", chat_type="private", chat_id=111, update_id=1))
+    await wait_for(lambda: len(fake_server.prompts) == 1)
+    session_id = store.get_conversation(111, 0).active_session_id
+
+    await send(bot_app, update("A second request", chat_type="private", chat_id=111, update_id=2))
+    await wait_for(lambda: len(fake_server.prompts) == 2)
+
+    assert store.binding_title(111, 0, session_id) == "Name this from here"
+
+
+async def test_new_then_first_message_names_the_new_session(bot_app, fake_server, store) -> None:
+    await send(bot_app, update("First session topic", chat_type="private", chat_id=111, update_id=1))
+    await wait_for(lambda: len(fake_server.prompts) == 1)
+    first = store.get_conversation(111, 0).active_session_id
+
+    await send(bot_app, cmd("/new", chat_type="private", chat_id=111, update_id=2))
+    second = store.get_conversation(111, 0).active_session_id
+    assert second and second != first
+    assert store.binding_title(111, 0, second) is None
+
+    await send(bot_app, update("Second session topic", chat_type="private", chat_id=111, update_id=3))
+    await wait_for(lambda: len(fake_server.prompts) == 2)
+    assert store.binding_title(111, 0, second) == "Second session topic"
+
+
+async def test_search_finds_a_derived_name(bot_app, fake_server, store, messenger) -> None:
+    await send(bot_app, update("Fix the login button", chat_type="private", chat_id=111, update_id=1))
+    await wait_for(lambda: len(fake_server.prompts) == 1)
+
+    await send(
+        bot_app,
+        cmd("/sessions search login", chat_type="private", chat_id=111, update_id=2),
+    )
+    text = listing(messenger)
+    assert "Fix the login button" in text

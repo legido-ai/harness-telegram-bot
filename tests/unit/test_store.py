@@ -4,9 +4,9 @@ from app.store import Store
 
 
 def test_migration_is_idempotent(store: Store) -> None:
-    assert store.schema_version() == 6
+    assert store.schema_version() == 7
     store.migrate()
-    assert store.schema_version() == 6
+    assert store.schema_version() == 7
 
 
 def test_delivery_ledger_dedupes_updates(store: Store) -> None:
@@ -120,7 +120,7 @@ def test_migration_collapses_existing_duplicate_bindings(tmp_path) -> None:
 
     migrated = Store(path)
     migrated.migrate()
-    assert migrated.schema_version() == 6
+    assert migrated.schema_version() == 7
     assert len(migrated.list_bindings(-100, 0)) == 1
     assert migrated.list_session_entries(-100, 0)[0].session_id == "ses_a"
 
@@ -226,3 +226,24 @@ def test_migration_preserves_an_active_duplicate_and_its_title(tmp_path) -> None
     assert len(entries) == 1
     assert entries[0].active is True
     assert entries[0].title == "Old title"
+
+
+def test_migration_clears_author_shaped_titles(tmp_path) -> None:
+    path = tmp_path / "titles.db"
+    store = Store(path)
+    store.migrate()
+    store.touch_conversation(-100, 0, "supergroup", "OC3 build")
+    store.touch_participant(111, "Javier", "javier", allowlisted=True)
+    store.bind_session(-100, 0, "ses_author", "Javier", bound_by=111)
+    store.bind_session(-100, 0, "ses_chat", "OC3 build", bound_by=111)
+    store.bind_session(-100, 0, "ses_named", "Nightly build", bound_by=111)
+    with store._conn:
+        store._conn.execute("UPDATE meta SET value='6' WHERE key='schema_version'")
+    store.close()
+
+    migrated = Store(path)
+    migrated.migrate()
+    assert migrated.schema_version() == 7
+    assert migrated.binding_title(-100, 0, "ses_author") is None
+    assert migrated.binding_title(-100, 0, "ses_chat") is None
+    assert migrated.binding_title(-100, 0, "ses_named") == "Nightly build"

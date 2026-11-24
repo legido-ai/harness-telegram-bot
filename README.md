@@ -32,7 +32,9 @@ Commands: `/start /help /id /new /context /status /abort /trigger /tts /sessions
 ### Resuming a session
 
 `/sessions` lists this chat's sessions, newest activity first, ten per page,
-with the current one marked `(current)`. Then:
+with the current one marked `(current)`. A session is named from its opening
+message (`Fix the login button`), never from the chat or the speaker; `/title`
+overrides it. Then:
 
 - `/sessions 2` — resume the second row of the list you just saw (a search
   result list counts as the list you saw).

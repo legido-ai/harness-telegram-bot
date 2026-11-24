@@ -155,20 +155,17 @@ def ago(epoch: int, now: float | None = None) -> str:
 
 
 def format_row(index: int, entry: SessionEntry, now: float | None = None) -> str:
-    marker = "*" if entry.active else " "
+    """One Hermes-style row: ``1. Title (current) — id``."""
+
     title = entry.title or "untitled"
     current = " (current)" if entry.active else ""
-    turns = f"{entry.turn_count} turns" if entry.turn_count != 1 else "1 turn"
     if entry.unassigned:
         origin = " · unassigned"
     elif entry.chat_title:
         origin = f" · {entry.chat_title}"
     else:
         origin = ""
-    return (
-        f"{marker} {index}. {title}{current} — {short_id(entry.session_id)}"
-        f" · {turns} · {ago(entry.last_active, now)}{origin}"
-    )
+    return f"{index}. {title}{current} — {short_id(entry.session_id)}{origin}"
 
 
 def format_listing(
@@ -194,7 +191,7 @@ def format_listing(
     elif all_chats:
         header = "📋 Sessions (all chats)"
     else:
-        header = "📋 Sessions in this chat"
+        header = "📋 Sessions"
 
     lines = [header, ""]
     stamp = now if now is not None else time.time()
@@ -205,7 +202,7 @@ def format_listing(
     if notice:
         lines.append(notice)
     lines.append(
-        "Resume: /sessions <number> or /sessions <id>. Rename: /title <name>."
+        "Resume: /resume <number> or /resume <id>. Rename: /title <name>."
     )
     if not search:
         lines.append("More: /sessions search <query> · /sessions all (admin).")

@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 TTS_MODES = ("off", "all", "auto")
 # Text-only by default: a voice note is transcribed and answered in text, and
 # audio is sent only when the user explicitly asks for it or enables /tts.
@@ -287,6 +287,29 @@ class Store:
                 self._conn.execute(
                     "CREATE UNIQUE INDEX IF NOT EXISTS ux_session_bindings_session "
                     "ON session_bindings(chat_id, thread_id, session_id)"
+                )
+            if current < 7:
+                # Before 0.4.1 a new session was titled with the chat name or
+                # the speaker's display name, so /sessions listed people, not
+                # topics. Clear those auto-titles once; a user-set /title that
+                # happens to equal a display name is the only collateral, and a
+                # title can be set again.
+                self._conn.execute(
+                    """
+                    UPDATE session_bindings
+                    SET title = NULL
+                    WHERE title IS NOT NULL AND (
+                        title = (
+                            SELECT c.title FROM conversations c
+                            WHERE c.chat_id = session_bindings.chat_id
+                              AND c.thread_id = session_bindings.thread_id
+                        )
+                        OR EXISTS (
+                            SELECT 1 FROM participants p
+                            WHERE p.display_name = session_bindings.title
+                        )
+                    )
+                    """
                 )
             if current < SCHEMA_VERSION:
                 self._conn.execute(
